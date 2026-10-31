@@ -1,0 +1,17 @@
+{
+  "name": "mohammed-darfoufi-middle-school-digital-library",
+  "version": "1.0.0",
+  "description": "Mohammed Darfoufi Middle School Digital Library - physical book finder with aisle, shelf and column lookup",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
