@@ -1176,6 +1176,14 @@ async function submitCatalogForm() {
     button.disabled = false;
   }
 
+  if (STATIC_MODE) {
+    // state.books was already updated by the static save; the published
+    // snapshot needs ~1 minute to republish, so don't re-pull it now
+    renderAdminList();
+    renderResults();
+    updateFormPreview();
+    return;
+  }
   await loadCatalog();
   renderAdminList();
   updateFormPreview();
@@ -1343,7 +1351,7 @@ function handleImportFile(file) {
 
       if (state.adminTab !== 'io') setAdminTab('io');
       if (imported) {
-        await loadCatalog();
+        if (!STATIC_MODE) await loadCatalog();
         renderAdminList();
       }
     } catch (error) {
@@ -1691,7 +1699,7 @@ function bindAdminEvents() {
       await api.deleteBook(id);
       toast(`"${title}" was removed from the catalog.`, 'success', { title: 'Book removed' });
       if (state.editingId === id) exitEditMode();
-      await loadCatalog();
+      if (!STATIC_MODE) await loadCatalog();
       renderAdminList();
       renderResults();
     } catch (error) {
