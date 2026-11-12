@@ -51,7 +51,16 @@
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Root paint layer. Phones show the HTML background when the page
+     rubber-bands past its top/bottom edge — with no background here the
+     system paints white/black there, which read as the page "flashing".
+     Matching var(--bg) makes overscroll invisible in both themes. */
+  background: var(--bg);
+  color-scheme: light;
+}
+html.theme-dark { color-scheme: dark; }
 
 body {
   margin: 0;
@@ -62,6 +71,9 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  /* svh: the *visible* viewport. 100vh alone is the URL-bar-hidden size,
+     so phones kept a phantom strip of scrollable empty page at the bottom. */
+  min-height: 100svh;
 }
 
 body.no-scroll { overflow: hidden; }
@@ -144,8 +156,10 @@ button { font-family: inherit; }
   position: sticky;
   top: 0;
   z-index: 60;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(8px);
+  /* Solid page colour, not a translucent blur: translucent sticky bars
+     are a known source of flicker/black flashes on mobile compositor
+     repaints, and the blur was invisible at this opacity anyway. */
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
@@ -785,6 +799,7 @@ html.theme-dark .signout-btn:hover { border-color: #5c2222; background: #341a1a;
 .modal__backdrop, .modal-backfill {
   position: absolute; inset: 0;
   background: rgba(16, 24, 40, 0.62);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   opacity: 0; transition: opacity 0.25s ease;
 }
@@ -879,8 +894,7 @@ html.theme-dark .signout-btn:hover { border-color: #5c2222; background: #341a1a;
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 70;
   display: none;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(10px);
+  background: var(--bg);
   border-top: 1px solid var(--border);
   padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom));
   justify-content: space-around;
@@ -889,10 +903,15 @@ html.theme-dark .signout-btn:hover { border-color: #5c2222; background: #341a1a;
   display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
   background: none; border: 0; cursor: pointer;
   font: inherit; font-size: 0.68rem; font-weight: 700; color: var(--muted-2);
-  padding: 0.3rem 0.9rem; border-radius: 10px;
-  transition: color 0.15s ease;
+  padding: 0.42rem 0.95rem; border-radius: 12px;
+  min-width: 62px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
-.tab.is-active { color: var(--blue-600); }
+.tab.is-active {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+.tab:active { transform: scale(0.94); }
 .tab .ti { position: relative; }
 .tab .ti::after {
   content: ""; position: absolute; left: 50%; transform: translateX(-50%);
@@ -966,6 +985,29 @@ html {
   .topbar { flex-wrap: wrap; }
   .brand-text strong { font-size: 0.88rem; }
 
+  /* iOS zooms into any focused input whose font is under 16px — keep
+     every text input at 16px on phones so the keyboard never "pops" */
+  .searchbar input,
+  .field input,
+  .field select,
+  .signin-row input { font-size: 16px; }
+
+  /* Hero: drop the promo card (noise on a small screen), tighten the headline */
+  .hero-promo { display: none; }
+  .hero h1 { font-size: 1.5rem; }
+  .hero { margin-bottom: 1rem; }
+
+  /* Filter chips become one smooth horizontal strip you swipe through,
+     like the Figma phone spec — no wrapping into tall stacked walls */
+  .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip-row .chip { flex: none; }
+
   /* Admin book list rows: cover + title on line one, the location chip
      and Remove button wrap to line two when they don't fit. */
   .admin-booklist li { flex-wrap: wrap; row-gap: 0.4rem; }
@@ -979,7 +1021,7 @@ html {
 
   /* Fingers, not cursors: 44px-class targets */
   .chip { padding-block: 0.55rem; }
-  .tab { padding: 0.45rem 0.9rem 0.55rem; font-size: 0.7rem; }
+  .tab { padding: 0.45rem 0.7rem 0.55rem; font-size: 0.66rem; }
   .clear-filter { padding-block: 0.55rem; }
   .sortby { white-space: normal; }
 }
@@ -1196,8 +1238,8 @@ html.theme-dark { --no-cover: url('img/no-cover-dark.png'); }
 }
 
 /* Surfaces whose light colour was hardcoded rather than tokenised */
-html.theme-dark .topbar-wrap { background: rgba(8, 12, 25, 0.88); }
-html.theme-dark .tabbar { background: rgba(8, 12, 25, 0.94); }
+html.theme-dark .topbar-wrap { background: var(--bg); }
+html.theme-dark .tabbar { background: var(--bg); }
 html.theme-dark .sidenav-btn:hover { background: var(--bg-deep); }
 html.theme-dark .bm-grid { background: var(--bg-deep); }
 html.theme-dark .shelfmap-note span { color: var(--muted); }
