@@ -3,7 +3,7 @@
 /* ============================================================
    Mohammed Darfoufi Middle School — Digital Library
    Vanilla JS SPA
-   Routes: #/discover · #/map · #/admin (librarian space)
+   Routes: /discover · /map · /admin (librarian space)
    Built so future APIs plug into one `api` layer and all
    failures surface through `request()` + toasts.
    ============================================================ */
@@ -31,6 +31,7 @@ const state = {
   previewId: null,
   activeBookId: null,
   autofetched: false,
+  editingId: null,       // book id currently loaded into the admin form for editing
 };
 
 function visibleStep() {
@@ -57,6 +58,7 @@ const DOM = {
   shelfMap: $('#shelfMap'),
   shelfMapStatus: $('#shelfMapStatus'),
   previewMode: $('#previewMode'),
+  themeToggle: $('#themeToggle'),
   quickPreview: $('#quickPreview'),
   resultsTitle: $('#resultsTitle'),
   resultsSub: $('#resultsSub'),
@@ -93,6 +95,9 @@ const DOM = {
   isbnHint: $('#isbnHint'),
   autofetchBtn: $('#autofetchBtn'),
   clearFormBtn: $('#clearFormBtn'),
+  clearFormBtnLabel: $('#clearFormBtnLabel'),
+  formHeadTitle: $('#formHeadTitle'),
+  addBookBtnLabel: $('#addBookBtnLabel'),
   catFormEl: null, // the <form> element itself
   pvCover: $('#pvCover'),
   pvCoverFallback: $('#pvCoverFallback'),
@@ -182,6 +187,13 @@ const api = {
       body: JSON.stringify(payload),
     });
   },
+  updateBook(id, payload) {
+    return request(`/api/books/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
   deleteBook(id) {
     return request(`/api/books/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
@@ -223,8 +235,15 @@ function escapeHtml(value = '') {
     .replace(/'/g, '&#39;');
 }
 
-const coverUrl = (book) =>
-  book?.coverUrl || (book?.isbn ? `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg` : '');
+const coverUrl = (book) => {
+  const raw =
+    book?.coverUrl ||
+    (book?.isbn ? `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg` : '');
+  // Local cover files are stored root-absolute ("/covers/x.jpg"); serve
+  // them relative so they resolve on any host — including GitHub Pages
+  // sub-paths, where "/covers/…" would point one level too high.
+  return raw.startsWith('/') && !raw.startsWith('//') ? raw.slice(1) : raw;
+};
 
 const priceNumber = (text) => {
   const parsed = parseFloat(String(text ?? '').replace(/[^\d.]/g, ''));
@@ -242,7 +261,49 @@ function updateStatTotals() {
 
 /* ---------- Catalog loading (with offline-first fallback) ---------- */
 
+/* ============================================================
+   Static-hosting mode (GitHub Pages etc.)
+   When no Node API answers the health check, the app runs
+   read-only from the published catalog snapshot and every
+   surface that needs a server is hidden.
+   ============================================================ */
+
+let STATIC_MODE = false;
+
+async function detectStaticMode() {
+  try {
+    const response = await fetch('api/health', { headers: { Accept: 'application/json' } });
+    const type = response.headers.get('content-type') || '';
+    STATIC_MODE = !(response.ok && type.includes('application/json'));
+  } catch (networkError) {
+    STATIC_MODE = true;
+  }
+  if (STATIC_MODE) {
+    // Hide every entry point into the librarian space.
+    $$('[data-nav="admin"]').forEach((el) => { el.hidden = true; });
+  }
+}
+
 async function loadCatalog() {
+  if (STATIC_MODE) {
+    // Static host (e.g. GitHub Pages): read the published snapshot.
+    try {
+      const snapshot = await request('data/catalog.json');
+      state.books = Array.isArray(snapshot) ? snapshot : snapshot.books || [];
+      state.loadError = state.books.length === 0;
+      if (state.loadError) {
+        toast('The published catalog is empty. Re-export and redeploy it.', 'error', { title: 'Catalog unavailable' });
+      }
+    } catch (staticError) {
+      state.books = [];
+      state.loadError = true;
+      toast('Catalog unavailable. The published snapshot is missing — redeploy the site.', 'error', { title: 'Catalog unavailable' });
+    }
+    updateStatTotals();
+    if (state.route === 'discover') renderResults();
+    if (state.route === 'map') renderMapView();
+    return;
+  }
   try {
     state.books = await api.books();
     state.loadError = false;
@@ -267,17 +328,29 @@ async function loadCatalog() {
 
 /* ============================================================
    Router
+   Clean URLs: /discover · /map · /admin (no "#" in shared links).
+   Old hash links (#/map) still work — the first navigation rewrites
+   them to a clean path.
    ============================================================ */
 
-function routeFromHash() {
+function routeFromLocation() {
   const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0];
-  return ROUTES.includes(hash) ? hash : 'discover';
+  if (hash && ROUTES.includes(hash)) return hash;
+  const path = window.location.pathname.split('/').filter(Boolean)[0] || '';
+  const route = ROUTES.includes(path) ? path : 'discover';
+  return STATIC_MODE && route === 'admin' ? 'discover' : route;
 }
 
 function setRoute(next, options = {}) {
   if (!ROUTES.includes(next)) next = 'discover';
+  if (STATIC_MODE && next === 'admin') next = 'discover';
   state.route = next;
-  window.history.replaceState(null, '', `#/${next}`);
+
+  const url = `/${next}`;
+  if (window.location.pathname !== url) {
+    if (options.replace) window.history.replaceState(null, '', url);
+    else window.history.pushState(null, '', url);
+  }
 
   ROUTES.forEach((route) => {
     const view = $(`#view-${route}`);
@@ -295,7 +368,7 @@ function setRoute(next, options = {}) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-window.addEventListener('hashchange', () => setRoute(routeFromHash()));
+window.addEventListener('popstate', () => setRoute(routeFromLocation(), { replace: true }));
 
 /* ============================================================
    Filtering / sorting / paging
@@ -386,20 +459,23 @@ function skeletonHTML() {
     .join('');
 }
 
-/* Cover failures are caught once per container with a capture listener. */
+/* Cover failures are caught once per container with a capture listener:
+   the img is hidden and its same-size letter placeholder is shown, so
+   hovering never changes the panel's layout. */
 function bindCoverFallbacks(container) {
   container.addEventListener(
     'error',
     (event) => {
       const img = event.target;
       if (!(img instanceof HTMLImageElement)) return;
-      const fallback = img.parentElement?.querySelector('.cover-fallback');
+      const fallback = img.parentElement?.querySelector(
+        '.cover-fallback, .qp-cover-fallback, .bm-media-fallback'
+      );
       if (fallback) {
-        fallback.textContent = (img.alt || 'B').replace(/^Cover of /, '').charAt(0);
+        fallback.textContent = (img.alt || 'B').replace(/^Cover of /, '').charAt(0).toUpperCase();
         fallback.hidden = false;
-      } else {
-        img.hidden = true;
       }
+      img.hidden = true;
     },
     true
   );
@@ -465,7 +541,8 @@ function renderQuickPreview() {
 
   DOM.quickPreview.innerHTML = `
     <div class="qp-top">
-      ${bookCoverHTML(preview, 'qp-cover')}
+      <img class="qp-cover" src="${escapeHtml(coverUrl(preview))}" alt="Cover of ${escapeHtml(preview.title)}" loading="lazy" />
+      <span class="qp-cover-fallback" hidden>${escapeHtml((preview.title || 'B').charAt(0).toUpperCase())}</span>
       <div class="qp-top-text">
         <span class="qp-price">${escapeHtml(preview.estimatedPrice || '—')}<small>Estimated copy price</small></span>
         <span class="qp-spot">${escapeHtml(preview.author)}</span>
@@ -737,6 +814,7 @@ function clearFieldErrors() {
 function setBanner(message, type = 'error') {
   DOM.formBanner.textContent = message;
   DOM.formBanner.classList.toggle('is-success', type === 'success');
+  DOM.formBanner.classList.toggle('is-info', type === 'info');
   DOM.formBanner.hidden = !message;
 }
 
@@ -798,8 +876,9 @@ function validateAdminForm(values) {
   const errors = {};
   if (!values.title) errors.title = 'Title is required. Type the title printed on the book cover.';
   if (!values.author) errors.author = 'Author is required.';
-  if (!values.isbn) errors.isbn = 'ISBN is required.';
-  else if (!/^\d{13}$/.test(values.isbn)) errors.isbn = 'ISBN must be exactly 13 digits starting 978 or 979.';
+  if (values.isbn && !/^\d{13}$/.test(values.isbn)) {
+    errors.isbn = 'ISBN must be exactly 13 digits starting 978 or 979 — or leave it blank.';
+  }
   if (!values.overview) errors.overview = 'Overview is required. Write a short, student-friendly synopsis.';
   return errors;
 }
@@ -817,20 +896,39 @@ async function submitCatalogForm() {
 
   const button = $('#addBookBtn');
   button.disabled = true;
+  const payload = {
+    title: values.title,
+    author: values.author,
+    category: values.category,
+    language: values.language,
+    columnNumber: Number(values.columnNumber),
+    shelfTier: values.shelfTier,
+    isbn: values.isbn,
+    overview: values.overview,
+    estimatedPrice: values.price ? Number(values.price) : '',
+  };
+  const editing = Boolean(state.editingId);
   try {
-    const result = await api.createBook({
-      title: values.title,
-      author: values.author,
-      category: values.category,
-      language: values.language,
-      columnNumber: Number(values.columnNumber),
-      shelfTier: values.shelfTier,
-      isbn: values.isbn,
-      overview: values.overview,
-      estimatedPrice: values.price ? Number(values.price) : '',
-    });
-    setBanner(`"${result.book.title}" was added to the catalog.`, 'success');
-    toast(`"${result.book.title}" is now catalogued. Students can find it in ${locationLabel(result.book.columnNumber, result.book.shelfTier)}.`, 'success', { title: 'Book added' });
+    const result = editing
+      ? await api.updateBook(state.editingId, payload)
+      : await api.createBook(payload);
+    setBanner(
+      editing
+        ? `"${result.book.title}" was updated. Students now find it in ${locationLabel(result.book.columnNumber, result.book.shelfTier)}.`
+        : `"${result.book.title}" was added to the catalog.`,
+      'success'
+    );
+    toast(
+      editing
+        ? `"${result.book.title}" was updated. It lives in ${locationLabel(result.book.columnNumber, result.book.shelfTier)}.`
+        : `"${result.book.title}" is now catalogued. Students can find it in ${locationLabel(result.book.columnNumber, result.book.shelfTier)}.`,
+      'success',
+      { title: editing ? 'Book updated' : 'Book added' }
+    );
+    if (editing) {
+      state.editingId = null;
+      syncFormEditMode();
+    }
     DOM.catForm.reset();
     DOM.fields.columnNumber.value = '3';
     DOM.fields.shelfTier.value = 'B';
@@ -850,19 +948,69 @@ async function submitCatalogForm() {
   updateFormPreview();
 }
 
+function syncFormEditMode() {
+  const editing = Boolean(state.editingId);
+  if (DOM.formHeadTitle) DOM.formHeadTitle.textContent = editing ? 'Edit catalog entry' : 'New catalog entry';
+  if (DOM.addBookBtnLabel) DOM.addBookBtnLabel.textContent = editing ? 'Save changes' : 'Add to catalog';
+  if (DOM.clearFormBtnLabel) DOM.clearFormBtnLabel.textContent = editing ? 'Cancel edit' : 'Clear form';
+}
+
+function exitEditMode() {
+  if (!state.editingId) return;
+  state.editingId = null;
+  DOM.catForm.reset();
+  DOM.fields.columnNumber.value = '3';
+  DOM.fields.shelfTier.value = 'B';
+  clearFieldErrors();
+  setBanner('');
+  syncFormEditMode();
+  updateFormPreview();
+  renderAdminList();
+}
+
+function startEditBook(id) {
+  const book = state.books.find((b) => b.id === id);
+  if (!book) return;
+  state.editingId = book.id;
+
+  DOM.fields.title.value = book.title || '';
+  DOM.fields.author.value = book.author || '';
+  DOM.fields.category.value = book.category || '';
+  DOM.fields.language.value = book.language || '';
+  DOM.fields.columnNumber.value = String(book.columnNumber ?? '3');
+  DOM.fields.shelfTier.value = book.shelfTier || 'B';
+  DOM.fields.isbn.value = book.isbn || '';
+  DOM.fields.overview.value = book.overview || '';
+  DOM.fields.price.value =
+    book.estimatedPrice === '' || book.estimatedPrice == null
+      ? ''
+      : String(book.estimatedPrice).replace(/mad/i, '').trim();
+
+  clearFieldErrors();
+  setBanner(`Editing "${book.title}". Change the fields, then save.`, 'info');
+  syncFormEditMode();
+  updateFormPreview();
+  renderAdminList();
+  DOM.catForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  DOM.fields.title.focus({ preventScroll: true });
+}
+
 function renderAdminList() {
   DOM.adminListCount.textContent = String(state.books.length);
   DOM.adminBookList.innerHTML = state.books
     .map(
       (book) => `
-      <li>
+      <li class="${state.editingId === book.id ? 'is-editing' : ''}">
         <img class="abl-cover" src="${escapeHtml(coverUrl(book))}" alt="" loading="lazy" />
         <span class="abl-info">
           <strong>${escapeHtml(book.title)}</strong>
           <small>${escapeHtml(book.author)} · ${escapeHtml(book.isbn)}</small>
         </span>
         <span class="abl-loc">${escapeHtml(locationLabel(book.columnNumber, book.shelfTier))}</span>
-        <button class="delete-btn" data-delete="${escapeHtml(book.id)}" data-title="${escapeHtml(book.title)}" type="button">Remove</button>
+        <span class="abl-actions">
+          <button class="edit-btn${state.editingId === book.id ? ' is-active' : ''}" data-edit="${escapeHtml(book.id)}" type="button">Edit</button>
+          <button class="delete-btn" data-delete="${escapeHtml(book.id)}" data-title="${escapeHtml(book.title)}" type="button">Remove</button>
+        </span>
       </li>`
     )
     .join('');
@@ -1024,10 +1172,17 @@ function bindDiscoverEvents() {
   });
 
   const hoverFine = window.matchMedia('(hover: hover) and (pointer: fine)');
+  // Touch devices never hover: the panel simply follows the top of the
+  // current results, so relabel it instead of promising a hover behaviour.
+  if (window.matchMedia('(hover: none)').matches && DOM.previewMode) {
+    DOM.previewMode.textContent = 'Top result';
+  }
   DOM.bookGrid.addEventListener('mouseover', (event) => {
     if (!hoverFine.matches) return;
     const card = event.target.closest('.book-card');
-    if (!card) return;
+    // Same card still under the cursor (or unraversable child of it):
+    // re-rendering again would blink the preview for nothing.
+    if (!card || card.dataset.bookId === state.previewId) return;
     $$('.book-card', DOM.bookGrid).forEach((el) => el.classList.toggle('is-previewed', el === card));
     state.previewId = card.dataset.bookId;
     renderQuickPreview();
@@ -1137,6 +1292,11 @@ function bindAdminEvents() {
   });
 
   DOM.clearFormBtn.addEventListener('click', () => {
+    if (state.editingId) {
+      exitEditMode();
+      toast('Edit cancelled. The book keeps its current details.', 'info', { title: 'Edit cancelled' });
+      return;
+    }
     DOM.catForm.reset();
     DOM.fields.columnNumber.value = '3';
     DOM.fields.shelfTier.value = 'B';
@@ -1217,6 +1377,15 @@ function bindAdminEvents() {
   });
 
   DOM.adminBookList.addEventListener('click', async (event) => {
+    const editButton = event.target.closest('[data-edit]');
+    if (editButton) {
+      if (state.editingId === editButton.dataset.edit) {
+        exitEditMode();
+      } else {
+        startEditBook(editButton.dataset.edit);
+      }
+      return;
+    }
     const button = event.target.closest('[data-delete]');
     if (!button) return;
     const id = button.dataset.delete;
@@ -1225,6 +1394,7 @@ function bindAdminEvents() {
     try {
       await api.deleteBook(id);
       toast(`"${title}" was removed from the catalog.`, 'success', { title: 'Book removed' });
+      if (state.editingId === id) exitEditMode();
       await loadCatalog();
       renderAdminList();
       renderResults();
@@ -1235,16 +1405,50 @@ function bindAdminEvents() {
 }
 
 /* ============================================================
+   Theme (dark mode)
+   - Initial state comes from <head>'s tiny inline script (no flash),
+     stored in localStorage under "mdms-theme".
+   - The toggle flips it with a one-shot crossfade class.
+   ============================================================ */
+
+function bindThemeToggle() {
+  if (!DOM.themeToggle) return;
+  const root = document.documentElement;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  let fadeTimer = 0;
+  let dark = root.classList.contains('theme-dark');
+
+  const syncToggle = () => {
+    DOM.themeToggle.setAttribute('aria-pressed', String(dark));
+    DOM.themeToggle.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    if (meta) meta.setAttribute('content', dark ? '#0b1120' : '#ffffff');
+  };
+  syncToggle();
+
+  DOM.themeToggle.addEventListener('click', () => {
+    dark = !dark;
+    try { localStorage.setItem('mdms-theme', dark ? 'dark' : 'light'); } catch (e) {}
+    root.classList.add('theme-anim');
+    root.classList.toggle('theme-dark', dark);
+    syncToggle();
+    window.clearTimeout(fadeTimer);
+    fadeTimer = window.setTimeout(() => root.classList.remove('theme-anim'), 480);
+  });
+}
+
+/* ============================================================
    Boot
    ============================================================ */
 
 async function init() {
   bindTopNavEvents();
+  bindThemeToggle();
   bindDiscoverEvents();
   bindModalEvents();
   bindAdminEvents();
 
-  setRoute(routeFromHash());
+  await detectStaticMode();
+  setRoute(routeFromLocation(), { replace: true });
   renderSkeletons();
   await loadCatalog();
   renderResults();

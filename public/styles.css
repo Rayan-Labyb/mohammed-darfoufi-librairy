@@ -12,6 +12,10 @@
   --blue-100: #dbe6fd;
   --blue-50: #eef4ff;
 
+  /* "Inverted" fill (dark chip on light theme, light chip on dark theme) */
+  --inverse-bg: #101828;
+  --inverse-fg: #ffffff;
+
   --ink-900: #101828;
   --ink-700: #344054;
   --muted: #667085;
@@ -26,6 +30,8 @@
   --red-600: #dc2626;
 
   --bg: #f4f6fb;
+  --bg-deep: #fafbfd;   /* recessed panels */
+  --grad-deep: #101828; /* dark end of blue gradients (stays dark in dark mode) */
   --surface: #ffffff;
   --border: #e7eaf3;
   --border-strong: #d0d5dd;
@@ -227,7 +233,7 @@ button { font-family: inherit; }
   font-size: 0.76rem; font-weight: 600; color: var(--muted-2);
   border: 1px solid var(--border); border-radius: 8px;
   padding: 0.25rem 0.5rem;
-  background: #fafbfd;
+  background: var(--bg-deep);
 }
 
 /* ---------- Filter rows & chips ---------- */
@@ -248,7 +254,7 @@ button { font-family: inherit; }
 }
 .chip:hover { border-color: var(--border-strong); color: var(--ink-900); }
 .chip:active { transform: scale(0.97); }
-.chip.is-active { background: var(--ink-900); border-color: var(--ink-900); color: #fff; }
+.chip.is-active { background: var(--inverse-bg); border-color: var(--inverse-bg); color: var(--inverse-fg); }
 
 .filter-row--columns { justify-content: flex-start; }
 .filter-row--columns .chip-row { flex: 1; }
@@ -269,6 +275,19 @@ button { font-family: inherit; }
 }
 
 .dash-rail { display: flex; flex-direction: column; gap: 1rem; }
+
+/* The rail follows the scroll on desktop so the shelf map + quick
+   preview stay on screen while browsing long book lists. */
+@media (min-width: 1024px) {
+  .dash-rail {
+    position: sticky;
+    top: 84px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding-right: 2px;
+  }
+}
 
 .rail-card {
   background: var(--surface);
@@ -301,7 +320,7 @@ button { font-family: inherit; }
 .shelf-tile {
   position: relative;
   border: 1.5px solid var(--border);
-  background: #fafbfd;
+  background: var(--bg-deep);
   border-radius: 10px;
   padding: 0.55rem 0.5rem 0.75rem;
   cursor: pointer;
@@ -315,7 +334,7 @@ button { font-family: inherit; }
 .shelf-tile:hover { border-color: var(--border-strong); transform: translateY(-1px); }
 .shelf-tile:active { transform: scale(0.97); }
 .shelf-tile .num { font-size: 0.8rem; font-weight: 700; color: var(--ink-700); line-height: 1; display: flex; align-items: center; gap: 0.25rem; }
-.shelf-tile .num .count { background: var(--ink-900); color: #fff; border-radius: var(--radius-pill); font-size: 0.62rem; padding: 0.1rem 0.45rem; }
+.shelf-tile .num .count { background: var(--inverse-bg); color: var(--inverse-fg); border-radius: var(--radius-pill); font-size: 0.62rem; padding: 0.1rem 0.45rem; }
 .shelf-tile .bars { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; }
 .shelf-tile .bars i { display: block; height: 7px; border-radius: 3px; background: #e3e7f2; }
 .shelf-tile.is-selected { border-color: var(--amber-500); background: var(--amber-50); }
@@ -331,21 +350,30 @@ button { font-family: inherit; }
 .shelfmap-status strong { color: var(--amber-700); }
 
 /* Quick preview */
-.qp-body { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.7rem; }
+/* Fixed minimum height: swapping books must never resize this card,
+   otherwise the book grid below shifts under the cursor and the
+   hover preview cascades/blinks. */
+.qp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+  min-height: 218px;
+}
 .qp-top { display: flex; gap: 0.7rem; align-items: flex-start; }
 .qp-cover {
   width: 74px; aspect-ratio: 2 / 3; border-radius: 8px;
   border: 2.5px solid #fff;
   box-shadow: 0 6px 16px rgba(16, 24, 40, 0.28);
   object-fit: cover; flex: none;
-  background: linear-gradient(160deg, var(--blue-600), var(--ink-900));
+  background: linear-gradient(160deg, var(--blue-600), var(--grad-deep));
 }
 .qp-cover-fallback {
   width: 74px; aspect-ratio: 2 / 3; flex: none;
   border-radius: 8px; border: 2.5px solid #fff;
   box-shadow: 0 6px 16px rgba(16, 24, 40, 0.28);
   display: grid; place-items: center;
-  background: linear-gradient(160deg, var(--blue-600), var(--ink-900));
+  background: linear-gradient(160deg, var(--blue-600), var(--grad-deep));
   color: #fff; font-size: 1.5rem; font-weight: 800;
 }
 .qp-top-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
@@ -429,13 +457,13 @@ button { font-family: inherit; }
   border: 2.5px solid #fff;
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(16, 24, 40, 0.28);
-  background: linear-gradient(160deg, var(--blue-600), var(--ink-900));
+  background: linear-gradient(160deg, var(--blue-600), var(--grad-deep));
 }
 .cover-fallback {
   position: absolute; inset: 2.5px;
   border-radius: 6px;
   display: grid; place-items: center;
-  background: linear-gradient(160deg, var(--blue-600), var(--ink-900));
+  background: linear-gradient(160deg, var(--blue-600), var(--grad-deep));
   color: #fff; font-size: 1.8rem; font-weight: 800;
   border: 2.5px solid #fff;
 }
@@ -534,7 +562,7 @@ button { font-family: inherit; }
 .map-tier {
   display: flex; align-items: center; justify-content: space-between;
   border: 1px solid var(--border); border-radius: 9px;
-  background: #fafbfd; padding: 0.4rem 0.6rem;
+  background: var(--bg-deep); padding: 0.4rem 0.6rem;
   font-size: 0.8rem; font-weight: 700; color: var(--ink-700);
 }
 .map-tier--hits { border-color: var(--amber-500); background: var(--amber-100); color: var(--amber-700); }
@@ -615,6 +643,7 @@ button { font-family: inherit; }
   border-radius: 10px; padding: 0.65rem 0.85rem; font-size: 0.85rem;
 }
 .form-banner.is-success { border-color: #d3f2dc; border-left-color: var(--green-600); background: #f2fbf5; color: #14532d; }
+.form-banner.is-info { border-color: var(--blue-100); border-left-color: var(--blue-600); background: var(--blue-50); color: var(--blue-700); }
 
 .form-section { border-top: 1px solid var(--border); margin-top: 1.1rem; padding-top: 1.1rem; }
 .form-section h3 { font-size: 0.95rem; }
@@ -649,7 +678,7 @@ button { font-family: inherit; }
 .pv-cover {
   position: relative; aspect-ratio: 2 / 3; max-width: 180px;
   border-radius: 10px; overflow: hidden;
-  background: linear-gradient(160deg, var(--blue-600), var(--ink-900));
+  background: linear-gradient(160deg, var(--blue-600), var(--grad-deep));
   border: 1px solid var(--border);
   margin-bottom: 0.7rem;
 }
@@ -666,7 +695,7 @@ button { font-family: inherit; }
   display: flex; align-items: center; gap: 0.6rem;
   font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--ink-700);
   border: 1px solid var(--border); border-radius: 10px;
-  background: #fafbfd; padding: 0.55rem 0.8rem; cursor: pointer;
+  background: var(--bg-deep); padding: 0.55rem 0.8rem; cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .tier:hover { border-color: var(--border-strong); }
@@ -695,13 +724,18 @@ button { font-family: inherit; }
 .abl-info strong { font-size: 0.85rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .abl-info small { color: var(--muted); font-size: 0.72rem; }
 .abl-loc { color: var(--amber-700); background: var(--amber-50); border: 1px solid var(--amber-100); border-radius: var(--radius-pill); font-size: 0.7rem; font-weight: 700; padding: 0.22rem 0.6rem; white-space: nowrap; }
-.delete-btn {
+.delete-btn,
+.edit-btn {
   background: none; border: 1px solid var(--border); color: var(--muted);
   border-radius: 9px; padding: 0.4rem 0.55rem; cursor: pointer; font-size: 0.78rem; font-weight: 600;
   display: inline-flex; align-items: center; gap: 0.3rem;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 .delete-btn:hover { color: var(--red-600); border-color: #f6c8c8; background: #fef4f4; }
+.edit-btn:hover { color: var(--blue-600); border-color: var(--blue-100); background: var(--blue-50); }
+.edit-btn.is-active { color: var(--inverse-fg); border-color: var(--inverse-bg); background: var(--inverse-bg); }
+.abl-actions { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; }
+.admin-booklist li.is-editing { border-color: var(--amber-500); background: var(--amber-50); }
 
 .io-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: stretch; }
 .io-cards .card p { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; }
@@ -851,19 +885,26 @@ button { font-family: inherit; }
 
 /* ---------- Animations ---------- */
 @media (max-width: 1023px) {
-  .dash-layout { grid-template-columns: 1fr; }
-  .book-grid { grid-template-columns: repeat(2, 1fr); }
+  /* minmax(0, 1fr) instead of 1fr: a track can never grow wider than the
+     screen just because one row's content is rigid — the #1 cause of
+     sideways scrolling on phones. */
+  .dash-layout { grid-template-columns: minmax(0, 1fr); }
+  .book-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-layout { grid-template-columns: minmax(0, 1fr); }
+  .admin-sidebar { position: static; min-width: 0; }
+  .sidenav { flex-direction: row; flex-wrap: wrap; }
+  .catalog-layout { grid-template-columns: minmax(0, 1fr); }
+  .io-cards { grid-template-columns: minmax(0, 1fr); }
   .pager { display: none; }
   .show-more { display: inline-flex; }
   .topnav { display: none; }
   .tabbar { display: flex; }
   body { padding-bottom: 4.6rem; }
-  .admin-layout { grid-template-columns: 1fr; }
-  .admin-sidebar { position: static; }
-  .sidenav { flex-direction: row; flex-wrap: wrap; }
-  .catalog-layout { grid-template-columns: 1fr; }
-  .io-cards { grid-template-columns: 1fr; }
   .page-info { white-space: nowrap; }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (max-width: 720px) {
@@ -871,11 +912,12 @@ button { font-family: inherit; }
   .hero { flex-direction: column; align-items: flex-start; }
   .hero-promo { max-width: none; }
   .kb-hint { display: none; }
-  .bigmap { grid-template-columns: repeat(2, 1fr); }
+  .bigmap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Phone: stack tighter, bigger touch targets, nothing ever wider than the screen */
 @media (max-width: 640px) {
-  .book-grid { grid-template-columns: 1fr; }
+  .book-grid { grid-template-columns: minmax(0, 1fr); }
   .book-card {
     flex-direction: row;
     align-items: flex-start;
@@ -883,13 +925,321 @@ button { font-family: inherit; }
   }
   .book-cover { width: 104px; aspect-ratio: 2/3; flex: none; align-self: flex-start; }
   .book-card__copy { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
-  .field-pair { grid-template-columns: 1fr; }
+  .book-card__copy h3 { overflow-wrap: anywhere; }
+
+  .field-pair { grid-template-columns: minmax(0, 1fr); }
   .isbn-row { flex-direction: column; align-items: stretch; }
-  .results-foot { flex-direction: column; }
+  .results-foot { flex-direction: column; gap: 0.8rem; }
   .page-info { flex: none; }
   .bm-grid dd { font-size: 0.82rem; }
   .topbar { flex-wrap: wrap; }
   .brand-text strong { font-size: 0.88rem; }
+
+  /* Admin book list rows: cover + title on line one, the location chip
+     and Remove button wrap to line two when they don't fit. */
+  .admin-booklist li { flex-wrap: wrap; row-gap: 0.4rem; }
+  .abl-info { flex: 1 1 9rem; }
+  .admin-booklist .abl-actions { margin-left: auto; }
+
+  /* Admin form: buttons become full-width stacked targets */
+  .form-foot { flex-direction: column-reverse; align-items: stretch; }
+  .form-foot .btn { width: 100%; }
+  .admin-actions .btn { flex: 1 1 auto; }
+
+  /* Fingers, not cursors: 44px-class targets */
+  .chip { padding-block: 0.55rem; }
+  .tab { padding: 0.45rem 0.9rem 0.55rem; font-size: 0.7rem; }
+  .clear-filter { padding-block: 0.55rem; }
+  .sortby { white-space: normal; }
+}
+
+/* ============================================================
+   Scattered animations (transform/opacity only — cheap on GPU)
+   ============================================================ */
+
+/* View switch: fade in when a view is shown */
+.view { animation: view-in 0.3s ease; }
+
+/* Hero: gentle staged entrance + floating promo icon */
+.hero-copy .kicker { animation: fade-up 0.45s ease both; }
+.hero-copy h1 { animation: fade-up 0.5s ease 0.08s both; }
+.hero-copy .hero-sub { animation: fade-up 0.5s ease 0.16s both; }
+.hero-promo { animation: fade-up 0.55s ease 0.3s both; }
+.hero-promo-icon { animation: float-y 3.2s ease-in-out 1s infinite; }
+
+/* Search & filter rows: slide in below the hero */
+.searchbar { animation: fade-up 0.45s ease 0.12s both; }
+.filter-row { animation: fade-up 0.45s ease 0.2s both; }
+.filter-row--columns { animation-delay: 0.28s; }
+.chip:active { transform: scale(0.9); }
+
+/* Book grid: staggered pop-in as cards appear */
+.book-grid .book-card:nth-child(1) { animation-delay: 0s; }
+.book-grid .book-card:nth-child(2) { animation-delay: 0.06s; }
+.book-grid .book-card:nth-child(3) { animation-delay: 0.12s; }
+.book-grid .book-card:nth-child(4) { animation-delay: 0.18s; }
+.book-grid .book-card:nth-child(5) { animation-delay: 0.24s; }
+.book-grid .book-card:nth-child(6) { animation-delay: 0.3s; }
+.book-grid .book-card:nth-child(n + 7) { animation-delay: 0.36s; }
+
+/* Book covers: gloss sweep + tiny lift on hover */
+.book-cover { overflow: hidden; border-radius: 8px; }
+.book-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.28) 50%, transparent 58%);
+  transform: translateX(-130%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+  border-radius: 6px;
+}
+.book-card:hover .book-cover::after { transform: translateX(130%); }
+.book-card:hover .book-cover { transform: perspective(600px) rotateX(2deg) translateY(-2px); }
+.book-cover { transition: transform 0.25s ease; }
+
+/* Location chips: the pin gently floats */
+.loc-chip svg { animation: pin-drift 2.8s ease-in-out infinite; }
+
+/* Shelf mini-map tiles: pop in with a tiny bar fill on the selected column */
+.shelf-tile { animation: rise-in 0.35s ease both; }
+.shelf-tile:nth-child(2) { animation-delay: 0.05s; }
+.shelf-tile:nth-child(3) { animation-delay: 0.1s; }
+.shelf-tile:nth-child(4) { animation-delay: 0.15s; }
+.shelf-tile:nth-child(5) { animation-delay: 0.2s; }
+.shelf-tile:nth-child(6) { animation-delay: 0.25s; }
+.shelf-tile.is-selected { animation: tile-pick 0.45s ease; }
+
+/* Quick preview: soft swap when the hovered book changes */
+.qp-body > * { animation: fade-up 0.22s ease both; }
+.qp-cover-fallback, .cover-fallback { animation: soft-pulse 2.6s ease-in-out infinite; }
+
+/* Library map: columns rise in, selected column gets a pulse ring */
+.bigmap .map-col { animation: rise-in 0.4s ease both; }
+.bigmap .map-col:nth-child(2) { animation-delay: 0.06s; }
+.bigmap .map-col:nth-child(3) { animation-delay: 0.12s; }
+.bigmap .map-col:nth-child(4) { animation-delay: 0.18s; }
+.bigmap .map-col:nth-child(5) { animation-delay: 0.24s; }
+.bigmap .map-col:nth-child(6) { animation-delay: 0.3s; }
+.map-tier--hits { animation: soft-pulse 3.2s ease-in-out infinite; }
+
+/* Buttons: icon interest instead of full ripples */
+.btn svg { transition: transform 0.2s ease; }
+.btn--primary:hover svg { transform: scale(1.15); }
+#addBookBtn:hover svg { animation: wiggle 0.5s ease; }
+#autofetchBtn:hover svg { animation: spin-once 0.7s ease; }
+
+/* Help card: the "?" gets curious */
+.help-icon { animation: soft-pulse 2.6s ease-in-out infinite; }
+
+/* Shelf-tier selector: "← This book" nudges toward its shelf */
+.tier.is-current em { animation: nudge-x 1.8s ease-in-out infinite; }
+
+/* Admin: banner drops in; stats card gets a small breath */
+.form-banner { animation: banner-in 0.32s ease; }
+.admin-stats { animation: fade-up 0.45s ease 0.15s both; }
+
+/* Modal: cover drops in with a bounce; body items follow */
+.modal.is-open .bm-media img,
+.modal.is-open .bm-media-fallback { animation: cover-drop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.modal.is-open .bm-body > * { animation: fade-up 0.4s ease both; }
+.modal.is-open .bm-body > *:nth-child(1) { animation-delay: 0.12s; }
+.modal.is-open .bm-body > *:nth-child(2) { animation-delay: 0.16s; }
+.modal.is-open .bm-body > *:nth-child(3) { animation-delay: 0.2s; }
+.modal.is-open .bm-body > *:nth-child(n + 4) { animation-delay: 0.24s; }
+
+/* Empty state: the books bounce while you look for them */
+.empty-private { display: inline-block; animation: bounce-y 1.9s ease infinite; }
+
+/* Footer path: keeps walking */
+.footer-path { animation: soft-pulse 4s ease-in-out infinite; }
+
+@keyframes view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes pin-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+@keyframes tile-pick {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-9deg); }
+  75% { transform: rotate(9deg); }
+}
+@keyframes spin-once {
+  from { transform: rotate(0); }
+  to { transform: rotate(360deg); }
+}
+@keyframes nudge-x {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
+}
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cover-drop {
+  from { opacity: 0; transform: translateY(-18px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bounce-y {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+  55% { transform: translateY(-3px); }
+  70% { transform: translateY(-6px); }
+}
+
+/* ============================================================
+   Dark mode
+   A `theme-dark` class on <html> remaps every colour token, so
+   the whole design system flips at once. The toggle button and
+   the smooth crossfade live further below.
+   ============================================================ */
+
+html.theme-dark {
+  /* "Inverted" fill flips with the theme so active chips stay readable */
+  --inverse-bg: #dbe6fd;
+  --inverse-fg: #0b1120;
+
+  --bg: #0b1120;
+  --bg-deep: #2f3f6e;
+  --surface: #1e2b50;
+  --border: #3d4f80;
+  --border-strong: #556896;
+
+  --ink-900: #f2f5fc;
+  --ink-700: #ccd5ea;
+  --muted: #98a6c4;
+  --muted-2: #6e7c9a;
+
+  --blue-700: #60a5fa;
+  --blue-600: #3b82f6;
+  --blue-100: #2c4474;
+  --blue-50: #22335c;
+
+  --amber-700: #fbbf24;
+  --amber-100: #4a3512;
+  --amber-50: #33260c;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- "No cover" placeholder artwork ---------- */
+/* One artwork per theme; the fallback tiles (cards, quick preview,
+   modal, admin preview) simply become this image. The letter shown
+   underneath is hidden because the artwork already says "NO COVER". */
+:root { --no-cover: url('img/no-cover-light.png'); }
+html.theme-dark { --no-cover: url('img/no-cover-dark.png'); }
+
+.cover-fallback,
+.qp-cover-fallback,
+.bm-media-fallback,
+.pv-cover-fallback {
+  background: var(--no-cover) center / cover no-repeat;
+  color: transparent;
+  text-shadow: none;
+}
+
+/* Surfaces whose light colour was hardcoded rather than tokenised */
+html.theme-dark .topbar-wrap { background: rgba(8, 12, 25, 0.88); }
+html.theme-dark .tabbar { background: rgba(8, 12, 25, 0.94); }
+html.theme-dark .sidenav-btn:hover { background: var(--bg-deep); }
+html.theme-dark .bm-grid { background: var(--bg-deep); }
+html.theme-dark .shelfmap-note span { color: var(--muted); }
+html.theme-dark .shelf-tile .bars i { background: #2f4070; }
+html.theme-dark .shelf-tile.is-empty .bars i { background: #1c2946; }
+html.theme-dark .sk-block { background: linear-gradient(90deg, #1a2445 25%, #223058 50%, #1a2445 75%); }
+html.theme-dark .map-col { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45); }
+
+/* Alert banners keep meaning, but on dark cloth */
+html.theme-dark .form-banner {
+  border-color: #5c2222;
+  background: #3a1516;
+  color: #ffbdbd;
+}
+html.theme-dark .form-banner.is-success {
+  border-color: #1d4433;
+  background: #0f241a;
+  color: #a4e8c0;
+}
+html.theme-dark .delete-btn:hover {
+  border-color: #5c2222;
+  background: #341a1a;
+}
+html.theme-dark .edit-btn:hover {
+  border-color: var(--blue-100);
+  background: var(--blue-50);
+}
+
+/* ---------- Theme toggle button ---------- */
+.theme-toggle {
+  position: relative;
+  width: 40px; height: 40px;
+  flex: none;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-700);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.theme-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--ink-900);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.theme-toggle:active { transform: scale(0.92); }
+
+/* Sun and moon crossfade + orbit when the theme flips */
+.theme-toggle svg {
+  position: absolute;
+  width: 18px; height: 18px;
+  transition: opacity 0.4s ease, transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.theme-toggle .icon-sun { opacity: 0; transform: rotate(-120deg) scale(0.3); }
+.theme-dark .theme-toggle .icon-sun { opacity: 1; transform: rotate(0) scale(1); }
+.theme-toggle .icon-moon { opacity: 1; transform: rotate(0) scale(1); }
+.theme-dark .theme-toggle .icon-moon { opacity: 0; transform: rotate(120deg) scale(0.3); }
+
+/* ---------- The smooth switch ---------- */
+/* Applied by JS only for the moment of the flip: every colour fades
+   at once, so the swap reads as one gentle transition instead of a
+   repaint. Removed again right after so interactive transitions
+   (hovers, chips) return to their own speeds. */
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition: background-color 0.45s ease, background 0.45s ease,
+    color 0.45s ease, border-color 0.45s ease, fill 0.45s ease,
+    stroke 0.45s ease, box-shadow 0.45s ease, opacity 0.45s ease
+    !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

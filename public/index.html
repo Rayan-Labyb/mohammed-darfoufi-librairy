@@ -6,14 +6,26 @@
   <meta name="description" content="Mohammed Darfoufi Middle School Digital Library - discover physical books by aisle, column and shelf." />
   <meta name="theme-color" content="#ffffff" />
   <title>Mohammed Darfoufi Middle School Library</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <script>
+    /* Apply the saved / system theme before the first paint (no flash). */
+    try {
+      var saved = localStorage.getItem('mdms-theme');
+      var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) {
+        document.documentElement.classList.add('theme-dark');
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', '#0b1120');
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
 
   <header class="topbar-wrap">
     <div class="container topbar">
-      <a class="brand" href="#/discover">
+      <a class="brand" href="discover" data-nav="discover">
         <span class="brand-logo" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18" focusable="false"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z" fill="#3b82f6"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v16h5.5A2.5 2.5 0 0 1 20 21.5V5.5Z" fill="#93b4fd"/></svg>
         </span>
@@ -23,13 +35,17 @@
         </span>
       </a>
       <nav class="topnav" aria-label="Primary">
-        <a class="nav-link is-active" data-nav="discover" href="#/discover">Discover books</a>
-        <a class="nav-link" data-nav="map" href="#/map">Library map</a>
+        <a class="nav-link is-active" data-nav="discover" href="discover">Discover books</a>
+        <a class="nav-link" data-nav="map" href="map">Library map</a>
         <button class="nav-btn" data-nav="admin" type="button">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><rect x="4" y="10" width="16" height="10" rx="2" fill="currentColor" opacity=".2"/><path d="M8 10V7a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
           Librarian space
         </button>
       </nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" aria-label="Switch to dark mode" title="Dark mode">
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M20.4 14.2A8.6 8.6 0 0 1 9.8 3.6a8.6 8.6 0 1 0 10.6 10.6Z" fill="currentColor"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.6" fill="currentColor"/><path d="M12 2.6v2.2m0 14.4v2.2M2.6 12h2.2m14.4 0h2.2M5.2 5.2l1.6 1.6m10.4 10.4 1.6 1.6m0-13.6-1.6 1.6M6.8 17.2l-1.6 1.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg>
+      </button>
     </div>
   </header>
 
@@ -64,11 +80,12 @@
         <div class="filter-row">
           <span class="filter-label" id="exploreLabel">Explore by</span>
           <div class="chip-row" id="exploreChips" role="group" aria-labelledby="exploreLabel">
-            <button class="chip" type="button" data-type="category" data-value="Literature">Literature</button>
             <button class="chip" type="button" data-type="category" data-value="Science">Science</button>
-            <button class="chip" type="button" data-type="category" data-value="History">History</button>
+            <button class="chip" type="button" data-type="category" data-value="Children's Literature">Children's Literature</button>
+            <button class="chip" type="button" data-type="category" data-value="English Graded Reader">Graded Readers</button>
+            <button class="chip" type="button" data-type="category" data-value="Classic Literature">Classics</button>
             <button class="chip" type="button" data-type="language" data-value="French">French</button>
-            <button class="chip" type="button" data-type="language" data-value="Arabic">Arabic</button>
+            <button class="chip" type="button" data-type="language" data-value="English">English</button>
           </div>
         </div>
 
@@ -212,7 +229,7 @@
             <div class="catalog-layout">
               <form class="cat-form card" id="catForm" novalidate>
                 <header class="form-head">
-                  <h2>New catalog entry</h2>
+                  <h2 id="formHeadTitle">New catalog entry</h2>
                   <span class="req-note">* Required fields</span>
                 </header>
                 <div id="formBanner" class="form-banner" hidden></div>
@@ -234,10 +251,12 @@
                     <div class="field">
                       <label for="fCategory">Category *</label>
                       <select id="fCategory" name="category">
-                        <option value="Literature" selected>Literature</option>
-                        <option value="Science">Science</option>
+                        <option value="Science" selected>Science</option>
+                        <option value="Children's Literature">Children's Literature</option>
+                        <option value="English Graded Reader">English Graded Reader</option>
+                        <option value="Classic Literature">Classic Literature</option>
+                        <option value="Literature">Literature</option>
                         <option value="History">History</option>
-                        <option value="Science Fiction">Science Fiction</option>
                         <option value="Adventure">Adventure</option>
                       </select>
                       <p class="field-error" hidden></p>
@@ -246,8 +265,8 @@
                       <label for="fLanguage">Language *</label>
                       <select id="fLanguage" name="language">
                         <option value="French" selected>French</option>
-                        <option value="Arabic">Arabic</option>
                         <option value="English">English</option>
+                        <option value="Arabic">Arabic</option>
                       </select>
                       <p class="field-error" hidden></p>
                     </div>
@@ -311,10 +330,10 @@
                 </section>
 
                 <footer class="form-foot">
-                  <button class="btn btn--ghost" id="clearFormBtn" type="button">Clear form</button>
+                  <button class="btn btn--ghost" id="clearFormBtn" type="button"><span id="clearFormBtnLabel">Clear form</span></button>
                   <button class="btn btn--primary" id="addBookBtn" type="submit">
                     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-                    Add to catalog
+                    <span id="addBookBtnLabel">Add to catalog</span>
                   </button>
                 </footer>
               </form>
@@ -498,6 +517,6 @@
     </button>
   </nav>
 
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

@@ -1,12 +1,14 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs').promises;
+
+const { catalog } = require('./data/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-const DATA_FILE = path.join(__dirname, 'data', 'books.json');
+const SEED_FILE = path.join(__dirname, 'data', 'books.json');
 
 const COLUMNS = [1, 2, 3, 4, 5, 6];
 const SHELF_TIERS = ['A', 'B', 'C', 'D'];
@@ -27,28 +29,6 @@ class ApiError extends Error {
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
-
-/* ============================================================
-   Catalog persistence (portable books.json on disk)
-   ============================================================ */
-
-async function readCatalog() {
-  try {
-    const raw = await fs.readFile(DATA_FILE, 'utf8');
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data)) {
-      throw new ApiError('books.json is corrupted: expected an array.', 500);
-    }
-    return data;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError('The catalog file could not be read.', 500);
-  }
-}
-
-async function writeCatalog(books) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(books, null, 2) + '\n', 'utf8');
-}
 
 /* ============================================================
    Validation & normalization
@@ -73,21 +53,14 @@ function normalizePrice(value) {
   return text || '';
 }
 
-function nextBookId(books) {
-  const max = books.reduce((acc, book) => {
-    const match = /^mdms-book-(\d+)$/.exec(book.id || '');
-    return match ? Math.max(acc, Number(match[1])) : acc;
-  }, 0);
-  return `mdms-book-${String(max + 1).padStart(3, '0')}`;
-}
-
 function validateBook(input = {}, existing = null) {
   const src = existing ? { ...existing, ...input } : input;
   const errors = {};
 
+  const rawIsbn = normalizeText(src.isbn);
   const isbn = checkIsbn(src.isbn);
-  if (!isbn) {
-    errors.isbn = 'ISBN must be a valid 13-digit ISBN-13 starting with 978 or 979.';
+  if (!isbn && rawIsbn) {
+    errors.isbn = 'ISBN must be a valid 13-digit ISBN-13 starting with 978 or 979 — or leave it blank if the copy has none.';
   }
 
   const title = normalizeText(src.title);
@@ -117,7 +90,7 @@ function validateBook(input = {}, existing = null) {
 
   const estimatedPrice = normalizePrice(src.estimatedPrice);
 
-  let purchaseUrl = normalizeText(src.purchaseUrl);
+  let purchaseUrl = normalizeText(src.purchaseUrl) || '';
   if (!purchaseUrl && isbn) {
     purchaseUrl = `https://www.amazon.com/s?k=${isbn}`;
   }
@@ -138,8 +111,7 @@ function validateBook(input = {}, existing = null) {
   }
 
   return {
-    id: src.id || nextBookId,
-    isbn,
+    isbn: isbn || '',
     title,
     author,
     category,
@@ -160,57 +132,23 @@ function validateBook(input = {}, existing = null) {
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/data', express.static(path.join(__dirname, 'data')));
-
-const normalize = (value) => String(value ?? '').trim().toLowerCase();
-
-function filterBooks(books, { q, category, language, shelfTier, columnNumber } = {}) {
-  let results = [...books];
-
-  const query = normalize(q);
-  if (query) {
-    const tokens = query.split(/\s+/).filter(Boolean);
-    results = results.filter((book) => {
-      const haystack = [
-        book.title,
-        book.author,
-        book.overview,
-        book.category,
-        book.language,
-        book.shelfTier,
-        book.isbn,
-      ]
-        .map(normalize)
-        .join(' ');
-      return tokens.every((token) => haystack.includes(token));
-    });
-  }
-
-  if (category && category !== 'All') {
-    results = results.filter((book) => book.category === category);
-  }
-  if (language && language !== 'All') {
-    results = results.filter((book) => book.language === language);
-  }
-  if (shelfTier && shelfTier !== 'All') {
-    results = results.filter((book) => book.shelfTier === shelfTier);
-  }
-  const column = Number.parseInt(columnNumber, 10);
-  if (columnNumber !== undefined && columnNumber !== null && columnNumber !== '' && !Number.isNaN(column)) {
-    results = results.filter((book) => book.columnNumber === column);
-  }
-
-  return results;
-}
+// Clean SPA paths — the views live at /discover, /map, /admin (no "#")
+app.get(['/discover', '/map', '/admin'], (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'index.html'))
+);
+// books.json stays reachable for the offline fallback snapshot only
+// (the SQLite file and DB module are NOT served publicly).
+app.get('/data/books.json', (req, res) => res.sendFile(SEED_FILE));
 
 /* ============================================================
-   Routes
+   Routes — every read/write goes to the SQLite database
    ============================================================ */
 
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'mohammed-darfoufi-middle-school-digital-library',
+    storage: 'sqlite',
     timestamp: new Date().toISOString(),
   });
 });
@@ -218,7 +156,7 @@ app.get('/api/health', (req, res) => {
 app.get(
   '/api/stats',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
+    const books = catalog.listBooks();
     const stats = {
       total: books.length,
       columns: COLUMNS.length,
@@ -243,11 +181,11 @@ app.get(
 app.get(
   '/api/books',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
-    const results = filterBooks(books, req.query);
+    const total = catalog.countBooks();
+    const results = catalog.listBooks(req.query);
     res.json({
       count: results.length,
-      total: books.length,
+      total,
       filters: {
         q: req.query.q || '',
         category: req.query.category || 'All',
@@ -263,7 +201,7 @@ app.get(
 app.get(
   '/api/books/export',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
+    const books = catalog.listBooks();
     res.set('Content-Disposition', 'attachment; filename="catalog.json"');
     res.json(books);
   })
@@ -272,8 +210,7 @@ app.get(
 app.get(
   '/api/books/:id',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
-    const book = books.find((b) => b.id === req.params.id);
+    const book = catalog.getBook(req.params.id);
     if (!book) {
       throw new ApiError(`Book with id "${req.params.id}" was not found.`, 404);
     }
@@ -284,60 +221,56 @@ app.get(
 app.post(
   '/api/books',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
     const { id: _ignored } = req.body || {};
     void _ignored;
     const normalized = validateBook(req.body);
-    if (books.some((b) => b.isbn === normalized.isbn)) {
+    if (normalized.isbn && catalog.getByIsbn(normalized.isbn)) {
       throw new ApiError('This ISBN already exists in the catalog.', 409, {
         isbn: 'A book with this ISBN is already catalogued. Check the existing entry.',
       });
     }
-    const book = { ...normalized, id: nextBookId(books) };
-    books.push(book);
-    await writeCatalog(books);
-    res.status(201).json({ book, total: books.length });
+    const book = catalog.insertBook({ ...normalized, id: catalog.nextBookId() });
+    res.status(201).json({ book, total: catalog.countBooks() });
   })
 );
 
 app.put(
   '/api/books/:id',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
-    const existing = books.find((b) => b.id === req.params.id);
+    const existing = catalog.getBook(req.params.id);
     if (!existing) {
       throw new ApiError(`Book with id "${req.params.id}" was not found.`, 404);
     }
     const normalized = validateBook(req.body || {}, existing);
-    if (normalized.isbn !== existing.isbn && books.some((b) => b.isbn === normalized.isbn)) {
-      throw new ApiError('The updated ISBN already belongs to another book.', 409, {
-        isbn: 'Another book already uses this ISBN.',
-      });
+    if (normalized.isbn !== existing.isbn) {
+      const clash = catalog.getByIsbn(normalized.isbn);
+      if (clash && clash.id !== existing.id) {
+        throw new ApiError('The updated ISBN already belongs to another book.', 409, {
+          isbn: 'Another book already uses this ISBN.',
+        });
+      }
     }
-    const index = books.indexOf(existing);
-    books[index] = { ...existing, ...normalized, id: existing.id };
-    await writeCatalog(books);
-    res.json({ book: books[index] });
+    const book = catalog.updateBook(existing.id, normalized);
+    res.json({ book });
   })
 );
 
 app.delete(
   '/api/books/:id',
   asyncHandler(async (req, res) => {
-    const books = await readCatalog();
-    const existing = books.find((b) => b.id === req.params.id);
+    const existing = catalog.getBook(req.params.id);
     if (!existing) {
       throw new ApiError(`Book with id "${req.params.id}" was not found.`, 404);
     }
-    const next = books.filter((b) => b.id !== existing.id);
-    await writeCatalog(next);
-    res.json({ ok: true, id: existing.id, total: next.length });
+    catalog.deleteBook(existing.id);
+    res.json({ ok: true, id: existing.id, total: catalog.countBooks() });
   })
 );
 
 /**
  * Bulk import: accepts a bare array like books.json, or { books: [...] }.
- * Valid records are appended with new ids; invalid records are reported.
+ * Valid records are appended to the database with new ids; invalid records
+ * are reported individually so they can be fixed and retried.
  */
 app.post(
   '/api/books/import',
@@ -357,19 +290,17 @@ app.post(
       throw new ApiError('Import failed: at most 500 books can be imported at once.', 400);
     }
 
-    const books = await readCatalog();
     const imported = [];
     const errors = [];
-    const seenIsbns = new Set(books.map((b) => b.isbn));
+    const catalogIsbns = new Set(catalog.listBooks().map((b) => b.isbn));
 
     records.forEach((record, index) => {
       try {
-        const normalized = { ...validateBook(record) };
-        delete normalized.id;
-        if (seenIsbns.has(normalized.isbn)) {
+        const normalized = validateBook(record);
+        if (catalogIsbns.has(normalized.isbn)) {
           throw new ApiError(`Duplicate ISBN ${normalized.isbn} (already in catalog).`, 409);
         }
-        seenIsbns.add(normalized.isbn);
+        catalogIsbns.add(normalized.isbn);
         imported.push(normalized);
       } catch (error) {
         errors.push({
@@ -382,26 +313,25 @@ app.post(
     });
 
     if (imported.length) {
-      for (const book of imported) {
-        book.id = nextBookId(books);
-        books.push(book);
-      }
-      await writeCatalog(books);
+      catalog.insertMany(imported);
     }
 
     res.json({
       imported: imported.length,
       skipped: errors.length,
       totalInFile: records.length,
-      catalogSize: books.length,
+      catalogSize: catalog.countBooks(),
       errors,
     });
   })
 );
 
-app.get('/api/data', (req, res) => {
-  res.sendFile(DATA_FILE);
-});
+app.get(
+  '/api/data',
+  asyncHandler(async (req, res) => {
+    res.json(catalog.listBooks());
+  })
+);
 
 /* ============================================================
    Error handling (always last)
@@ -424,10 +354,34 @@ app.use((err, req, res, next) => {
     res.status(413).json({ error: 'Request body is too large.' });
     return;
   }
+  // Unique-index guard from the database layer surfaces as a clean 409.
+  if (err?.code === 'SQLITE_CONSTRAINT' && String(err.message).includes('isbn')) {
+    res.status(409).json({ error: 'A book with this ISBN is already catalogued.' });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`Mohammed Darfoufi Middle School Digital Library running on http://localhost:${PORT}`);
+  console.log(`Storage: SQLite (${path.join(__dirname, 'data', 'library.sqlite3')})`);
+  // Print every address other devices on the same network can use.
+  try {
+    const os = require('os');
+    const urls = [];
+    for (const addresses of Object.values(os.networkInterfaces())) {
+      for (const net of addresses || []) {
+        if (net.family === 'IPv4' && !net.internal) urls.push(`http://${net.address}:${PORT}`);
+      }
+    }
+    if (urls.length) {
+      console.log('Open from another device on the same network:');
+      for (const u of urls) console.log(`  ${u}`);
+    } else {
+      console.log('No external network address found — only localhost is reachable.');
+    }
+  } catch (err) {
+    console.log(`(Could not list network addresses: ${err.message})`);
+  }
 });

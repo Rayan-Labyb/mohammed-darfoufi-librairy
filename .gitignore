@@ -1,1 +1,5 @@
 node_modules/
+data/library.sqlite3
+data/library.sqlite3-wal
+data/library.sqlite3-shm
+.github/

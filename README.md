@@ -22,8 +22,8 @@ This web application provides a searchable digital catalog of the physical schoo
 * 🔍 **Real-Time Search & Filtering:** Filter books by title, author, subject/category, or physical library column.
 * 📍 **Physical Shelf Mapping:** Every book lists its exact aisle location (e.g., `Column 3, Shelf B`) to help students locate physical copies effortlessly.
 * 📱 **Mobile & Desktop Responsive:** Hover preview cards for desktop fast-skimming and tap-to-open modals optimized for smartphones in the library aisles.
-* 📦 **Automated & Portable Data:** Powered by a clean JSON database structure with integration support for public APIs (Open Library / Google Books API) to fetch missing book covers and summaries.
-* 🛠️ **Data Management:** Admin interface for updating and exporting catalog records offline.
+* 📦 **Real Database Storage:** Powered by an embedded **SQLite** database (`data/library.sqlite3`) — the admin panel adds, edits and removes books directly in it, no JSON files needed. `data/books.json` is kept only as a manual backup/restore source.
+* 🧹 **Data Management:** Admin interface for adding, updating, importing and exporting catalog records.
 
 ---
 
@@ -32,7 +32,7 @@ This web application provides a searchable digital catalog of the physical schoo
 ### Technologies Used
 * **Frontend:** HTML5, CSS3, Vanilla JavaScript (ES6+)
 * **Backend:** Node.js, Express.js
-* **Data Storage:** JSON Database (`data/books.json`)
+* **Data Storage:** SQLite database (`data/library.sqlite3`) via Node's built-in `node:sqlite` — no external database server required. Nothing is seeded automatically; run `npm run seed` to (re)load `data/books.json` by hand.
 
 ---
 
