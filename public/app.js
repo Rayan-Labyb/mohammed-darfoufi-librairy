@@ -219,6 +219,12 @@ async function ghRequest(path, options = {}) {
       renderAdmin();
       throw new ApiError('Your sign-in expired or was revoked. Sign in again.', { status: 401 });
     }
+    if (response.status === 403 && /resource not accessible|not authorized/i.test(payload?.message || '')) {
+      throw new ApiError(
+        'This token can read but not edit. Regenerate it with Permissions → Contents → Read and write.',
+        { status: 403 }
+      );
+    }
     throw new ApiError(payload?.message || `GitHub request failed (${response.status}).`, { status: response.status });
   }
   return payload;
