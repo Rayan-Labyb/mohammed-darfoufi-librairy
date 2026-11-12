@@ -329,15 +329,25 @@ async function loadCatalog() {
 /* ============================================================
    Router
    Clean URLs: /discover · /map · /admin (no "#" in shared links).
-   Old hash links (#/map) still work — the first navigation rewrites
-   them to a clean path.
+   The app may be mounted under a directory (GitHub Pages serves it
+   from /<user>/<repo>/), so the mount prefix is detected once and
+   every URL keeps it: /<user>/<repo>/discover etc. Old hash links
+   (#/map) still work — the first navigation rewrites them cleanly.
    ============================================================ */
+
+const APP_PREFIX = (() => {
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  const routeIdx = segments.findIndex((seg) => ROUTES.includes(seg));
+  const kept = routeIdx === -1 ? segments : segments.slice(0, routeIdx);
+  return kept.length ? '/' + kept.join('/') : '';
+})();
 
 function routeFromLocation() {
   const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0];
   if (hash && ROUTES.includes(hash)) return hash;
-  const path = window.location.pathname.split('/').filter(Boolean)[0] || '';
-  const route = ROUTES.includes(path) ? path : 'discover';
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  const last = segments[segments.length - 1] || '';
+  const route = ROUTES.includes(last) ? last : 'discover';
   return STATIC_MODE && route === 'admin' ? 'discover' : route;
 }
 
@@ -346,7 +356,7 @@ function setRoute(next, options = {}) {
   if (STATIC_MODE && next === 'admin') next = 'discover';
   state.route = next;
 
-  const url = `/${next}`;
+  const url = `${APP_PREFIX}/${next}`;
   if (window.location.pathname !== url) {
     if (options.replace) window.history.replaceState(null, '', url);
     else window.history.pushState(null, '', url);
@@ -585,6 +595,19 @@ function renderPagination(totalShown, total) {
   }
 }
 
+function renderCatalogUnavailable(message) {
+  DOM.bookGrid.innerHTML = '';
+  DOM.emptyState.hidden = false;
+  DOM.emptyMessage.textContent = message;
+  if (DOM.retryLoad) DOM.retryLoad.hidden = false;
+  DOM.pager.hidden = true;
+  DOM.showMoreBtn.hidden = true;
+  DOM.pageInfo.textContent = 'Catalog unavailable';
+  DOM.quickPreview.innerHTML = '';
+  state.previewId = null;
+  renderShelfMap();
+}
+
 function renderResults() {
   updateChipStates();
   const list = applyFilters();
@@ -598,7 +621,11 @@ function renderResults() {
   DOM.resultsSub.textContent = `${list.length} book${list.length === 1 ? '' : 's'} · Shelves A–D`;
 
   if (state.loadError) {
-    renderCatalogUnavailable('The catalog could not be loaded. Check the server, then retry.');
+    renderCatalogUnavailable(
+      STATIC_MODE
+        ? 'The published catalog could not be loaded. Rebuild the site (npm run build-pages) and push again.'
+        : 'The catalog could not be loaded. Check the server, then retry.'
+    );
     return;
   }
 
