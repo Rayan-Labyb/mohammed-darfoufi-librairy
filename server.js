@@ -11,7 +11,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const SEED_FILE = path.join(__dirname, 'data', 'books.json');
 
 const COLUMNS = [1, 2, 3, 4, 5, 6];
-const SHELF_TIERS = ['A', 'B', 'C', 'D'];
+const SHELF_TIERS = ['A', 'B', 'C', 'D', 'E'];
 
 /* ============================================================
    Errors — structured so the frontend (or future APIs) can

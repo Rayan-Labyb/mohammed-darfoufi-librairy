@@ -18,7 +18,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="styles.css?v=mwe49gzt" />
+  <link rel="stylesheet" href="styles.css?v=mwe4bwyk" />
 </head>
 <body>
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
@@ -172,7 +172,7 @@
             <p id="mapGuideText">Start at the entrance. Find the sign for the column of your book, then match the shelf letter printed on the book's location label.</p>
             <p class="map-chip"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg> <span id="mapChipText">Column — · Shelf —</span></p>
           </div>
-          <p class="map-guide-note">Numbers match the signs on each physical column. Shelves A–D, top to bottom.</p>
+          <p class="map-guide-note">Numbers match the signs on each physical column. Shelves A–E, top to bottom.</p>
         </section>
 
         <div class="bigmap" id="bigMap" aria-label="Full library map"></div>
@@ -308,9 +308,10 @@
                         <option value="A" selected>A — top shelf</option>
                         <option value="B">B</option>
                         <option value="C">C</option>
-                        <option value="D">D — bottom shelf</option>
+                        <option value="D">D</option>
+                        <option value="E">E — bottom shelf</option>
                       </select>
-                      <p class="field-hint">A = top shelf; D = bottom shelf.</p>
+                      <p class="field-hint">Shelves read A (top) to E (bottom); the location is letter + column, e.g. A3.</p>
                       <p class="field-error" hidden></p>
                     </div>
                   </div>
@@ -375,6 +376,7 @@
                     <button class="tier" data-tier="B" type="button"><span>B</span></button>
                     <button class="tier" data-tier="C" type="button"><span>C</span></button>
                     <button class="tier" data-tier="D" type="button"><span>D</span></button>
+                    <button class="tier" data-tier="E" type="button"><span>E</span></button>
                   </div>
                   <p class="tier-note">Behind shelf, from the top.</p>
                 </section>
@@ -508,8 +510,8 @@
         <h2 id="helpTitle" class="help-title">How the library works</h2>
         <ol class="help-steps">
           <li><strong>Search or explore.</strong> Type a title, an author, or an ISBN — or tap a category chip.</li>
-          <li><strong>Read the location label.</strong> Each book shows <em>Column 3 · Shelf B</em> unless the number and letter are printed there.</li>
-          <li><strong>Walk it.</strong> Columns 1–6 match the aisle signs; shelves A–D run top to bottom.</li>
+          <li><strong>Read the location label.</strong> Each book shows a code like <em>B3</em> — the letter is the shelf, the number is the column.</li>
+          <li><strong>Walk it.</strong> Columns 1–6 match the aisle signs; shelves A–E run top to bottom, so the signs read A1–A6, B1–B6 … E1–E6.</li>
           <li><strong>Lost?</strong> Ask <strong>Duaa &amp; Rayan</strong> at the library desk — they will find it with you.</li>
         </ol>
         <button class="btn btn--primary btn--block" id="helpBackBtn" type="button">Back to Discover</button>
@@ -537,6 +539,6 @@
     </button>
   </nav>
 
-  <script src="app.js?v=mwe49gzt"></script>
+  <script src="app.js?v=mwe4bwyk"></script>
 </body>
 </html>

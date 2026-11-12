@@ -11,7 +11,7 @@
 /* ---------- Constants ---------- */
 
 const COLUMNS = [1, 2, 3, 4, 5, 6];
-const TIERS = ['A', 'B', 'C', 'D'];
+const TIERS = ['A', 'B', 'C', 'D', 'E'];
 const PAGE_SIZE = 6;
 const ROUTES = ['discover', 'map', 'admin'];
 const ADMIN_TABS = ['catalog', 'map', 'io', 'guide'];
@@ -355,7 +355,7 @@ async function staticImportBooks(payload) {
       const column = Number.parseInt(record.columnNumber, 10);
       if (!(column >= 1 && column <= 6)) throw new Error('Column must be 1-6.');
       const tier = String(record.shelfTier || '').toUpperCase();
-      if (!['A', 'B', 'C', 'D'].includes(tier)) throw new Error('Shelf tier must be A, B, C or D.');
+      if (!['A', 'B', 'C', 'D', 'E'].includes(tier)) throw new Error('Shelf tier must be A, B, C, D or E.');
       const isbn = String(record.isbn || '').replace(/\D/g, '');
       staticAssertIsbnFree(books, isbn);
       const price = Number(String(record.estimatedPrice ?? '').replace(/[^\d.]/g, ''));
@@ -473,7 +473,9 @@ const priceNumber = (text) => {
 };
 
 function locationLabel(column, tier) {
-  return `Column ${column} · Shelf ${tier}`;
+  // Matches the physical signs on the shelves: shelf letter + column
+  // number, e.g. A1–A6 on the top shelf, E1–E6 on the bottom one.
+  return `${tier}${column}`;
 }
 
 function updateStatTotals() {
@@ -745,13 +747,13 @@ function renderShelfMap() {
     <button class="shelf-tile${column === state.column ? ' is-selected' : ''}${counts[column] === 0 ? ' is-empty' : ''}"
       type="button" data-column="${column}" aria-pressed="${column === state.column}">
       <span class="num">${column}${counts[column] ? ` <span class="count">${counts[column]}</span>` : ''}</span>
-      <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
     </button>
   `).join('');
   DOM.shelfMap.innerHTML = html;
 
   DOM.shelfMapStatus.innerHTML = state.column
-    ? `<strong>Column ${state.column}</strong> selected. Shelves A–D run top to bottom.`
+    ? `<strong>Column ${state.column}</strong> selected. Shelves A–E run top to bottom.`
     : 'Pick a column to see it highlighted on the shelf map.';
 }
 
@@ -835,7 +837,7 @@ function renderResults() {
     : state.filterType && state.filterValue
       ? `Books in ${state.filterValue}`
       : 'All books';
-  DOM.resultsSub.textContent = `${list.length} book${list.length === 1 ? '' : 's'} · Shelves A–D`;
+  DOM.resultsSub.textContent = `${list.length} book${list.length === 1 ? '' : 's'} · Shelves A–E`;
 
   if (state.loadError) {
     renderCatalogUnavailable(
@@ -904,7 +906,7 @@ function mapColumnHTML(column, counts, selected) {
     const tierCount = state.books.filter(
       (b) => b.columnNumber === column && b.shelfTier === tier
     ).length;
-    return `<span class="map-tier${tierCount ? ' map-tier--hits' : ''}">${tier}<small>${tierCount} book${tierCount === 1 ? '' : 's'}</small></span>`;
+    return `<span class="map-tier${tierCount ? ' map-tier--hits' : ''}">${tier}${column}<small>${tierCount} book${tierCount === 1 ? '' : 's'}</small></span>`;
   }).join('');
 
   return `
@@ -922,8 +924,8 @@ function renderMapView(options = {}) {
     ? `Start at the entrance. Find the sign for Column ${state.column}, then match the shelf letter on your book's location label.`
     : 'Start at the entrance. Pick a column below, then match the shelf letter on your book\'s location label.';
   DOM.mapChipText.textContent = state.column
-    ? `Column ${state.column} · Shelves A–D`
-    : 'Column — · Shelves A–D';
+    ? `Column ${state.column} · Shelves A–E`
+    : 'Column — · Shelves A–E';
 
   const columnBooks = state.column
     ? state.books.filter((b) => Number(b.columnNumber) === state.column)
