@@ -300,10 +300,18 @@ app.post(
     const catalogIsbns = new Set(
       catalog.listBooks().map((b) => b.isbn).filter(Boolean)
     );
+    const usedIds = new Set(catalog.listBooks().map((b) => b.id));
 
     records.forEach((record, index) => {
       try {
         const normalized = validateBook(record);
+        // Honor a supplied mdms-book-NNN id (e.g. numbered shelf lists
+        // with gaps); fall back to auto ids otherwise.
+        const suppliedId = String(record?.id || '').trim();
+        if (/^mdms-book-\d+$/.test(suppliedId) && !usedIds.has(suppliedId)) {
+          normalized.id = suppliedId;
+          usedIds.add(suppliedId);
+        }
         // Copies without a barcode share an empty ISBN; skip the check
         if (normalized.isbn && catalogIsbns.has(normalized.isbn)) {
           throw new ApiError(`Duplicate ISBN ${normalized.isbn} (already in catalog).`, 409);

@@ -23,10 +23,10 @@ const fs = require('fs');
 const https = require('https');
 const { catalog } = require(path.join(__dirname, '..', 'data', 'database'));
 
-const CONCURRENCY = 2;          // archive.org extraction is slow
+const CONCURRENCY = 1;          // googleapis.com throttles anonymous bursts (HTTP 429)
 const TIMEOUT_MS = 20000;       // per request hop
-const DELAY_MS = 300;
-const RETRIES = 2;
+const DELAY_MS = 2500;          // ~24 req/min stays under the anonymous quota
+const RETRIES = 4;
 const COVERS_DIR = path.join(__dirname, '..', 'public', 'covers');
 
 /* ---------- HTTP layer (IPv4 + manual redirects) ---------- */
@@ -86,8 +86,23 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchJson(url) {
   const res = await httpsRequest(url, { headers: { Accept: 'application/json' } });
+  if (res.status === 429) throw new Error('RATE_LIMITED');
   if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
   return JSON.parse(res.text());
+}
+
+/** Wait for a rate-limit window, then retry the whole task. */
+async function withRateLimitRetry(task, attempt = 0) {
+  try {
+    return await task();
+  } catch (error) {
+    if (error.message === 'RATE_LIMITED' && attempt < 5) {
+      const waitMs = 30000 + attempt * 15000;
+      await sleep(waitMs);
+      return withRateLimitRetry(task, attempt + 1);
+    }
+    throw error;
+  }
 }
 
 /** Download a cover with retries; returns { bytes, contentType } or null. */
@@ -116,9 +131,11 @@ async function downloadCover(url) {
 const norm = (value) =>
   String(value || '')
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
+    // Keep letters and digits in any script (Latin, Arabic, French
+    // accents, …); strip only diacritics, punctuation and symbols.
+    .normalize('NFC')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '') // Arabic harakat
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -185,7 +202,27 @@ async function olCandidates(title, author) {
 
 /* ---------- Google Books (metadata fallback) ---------- */
 
-async function googleCandidate(title, author) {
+async function googleCandidate(title, author, isbn = null) {
+  // An ISBN query is an exact match — try it first when we have one
+  if (isbn) {
+    const data = await fetchJson(
+      `https://www.googleapis.com/books/v1/volumes?maxResults=3&q=${encodeURIComponent(`isbn:${isbn}`)}`
+    );
+    const info = (data.items || []).map((item) => item.volumeInfo || {}).find(
+      (info2) => info2.imageLinks && (info2.imageLinks.thumbnail || info2.imageLinks.smallThumbnail)
+    );
+    if (info) {
+      const thumb = info.imageLinks.thumbnail || info.imageLinks.smallThumbnail;
+      return {
+        coverUrl: thumb.replace(/^http:\/\//i, 'https://').replace(/&zoom=\d/, '&zoom=2'),
+        suggestedIsbn: isbn,
+        matchedTitle: info.title,
+        published: info.publishedDate,
+        source: 'Google Books (ISBN)',
+      };
+    }
+  }
+
   const url = `https://www.googleapis.com/books/v1/volumes?maxResults=5&q=${encodeURIComponent(
     `${title} ${author}`
   )}`;
@@ -231,6 +268,15 @@ async function lookUp(book) {
       fs.writeFileSync(localFile, data.bytes);
       return { status: 'found', coverUrl: localPath, found: { source: `ISBN ${book.isbn}`, matchedTitle: book.title } };
     }
+    // Open Library lacks most Arabic editions — try Google Books by ISBN
+    const gByIsbn = await googleCandidate(book.title, book.author, book.isbn).catch(() => null);
+    if (gByIsbn) {
+      const gdata = await downloadCover(gByIsbn.coverUrl);
+      if (gdata && gdata.bytes.length > 1000) {
+        fs.writeFileSync(localFile, gdata.bytes);
+        return { status: 'found', coverUrl: localPath, found: gByIsbn };
+      }
+    }
   }
 
   // 2. Books with a leftover remote cover: pull it local when possible.
@@ -263,7 +309,7 @@ async function lookUp(book) {
 
   let gfound = null;
   try {
-    gfound = await googleCandidate(book.title, book.author);
+    gfound = await googleCandidate(book.title, book.author, book.isbn);
   } catch (error) {
     gfound = { error: `Google Books: ${error.message}` };
   }
@@ -292,7 +338,7 @@ async function run() {
   let batch = [];
   let done = 0;
   for (const book of books) {
-    const task = lookUp(book)
+    const task = withRateLimitRetry(() => lookUp(book))
       .then((result) => {
         results.set(book.id, result);
         done += 1;

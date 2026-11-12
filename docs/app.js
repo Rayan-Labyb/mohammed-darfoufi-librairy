@@ -359,8 +359,13 @@ async function staticImportBooks(payload) {
       const isbn = String(record.isbn || '').replace(/\D/g, '');
       staticAssertIsbnFree(books, isbn);
       const price = Number(String(record.estimatedPrice ?? '').replace(/[^\d.]/g, ''));
+      // Honor a supplied mdms-book-NNN id when it is not already taken
+      const suppliedId = String(record.id || '').trim();
+      const id = /^mdms-book-\d+$/.test(suppliedId) && !books.some((b) => b.id === suppliedId)
+        ? suppliedId
+        : staticNextBookId(books);
       books.push({
-        id: staticNextBookId(books),
+        id,
         isbn,
         title: String(record.title).trim(),
         author: String(record.author).trim(),

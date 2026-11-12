@@ -229,15 +229,14 @@ const catalog = {
     return result.changes > 0;
   },
 
-  /** Bulk insert with new auto ids inside one transaction. Returns inserted books. */
+  /** Bulk insert inside one transaction; honors supplied mdms-book ids when present. */
   insertMany(books) {
     const inserted = [];
     db.exec('BEGIN');
     try {
       for (const book of books) {
-        const { id: _drop, ...rest } = book;
-        void _drop;
-        inserted.push(this.insertBook(rest));
+        const record = book.id ? book : (({ id: _drop, ...rest }) => ({ ...rest }))(book);
+        inserted.push(this.insertBook(record));
       }
       db.exec('COMMIT');
     } catch (error) {
