@@ -18,7 +18,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="styles.css?v=mwdwwpmb" />
+  <link rel="stylesheet" href="styles.css?v=mwdx68mz" />
 </head>
 <body>
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
@@ -186,7 +186,22 @@
 
     <!-- ══════════════ LIBRARIAN SPACE (admin) ══════════════ -->
     <section id="view-admin" class="view" hidden>
-      <div class="container admin-layout">
+      <!-- Online (static hosting): unlock gate for librarians -->
+      <div class="container" id="adminSignin" hidden>
+        <div class="admin-signin card">
+          <p class="sidetag">Librarian space</p>
+          <h2>Unlock catalog editing</h2>
+          <p class="signin-copy">Visitors see the catalog read-only. Librarians sign in with a GitHub access token that has <strong>Contents: Read and write</strong> permission for this repository.</p>
+          <div class="signin-row">
+            <input id="ghTokenInput" type="password" placeholder="GitHub token (github_pat_… or ghp_…)" autocomplete="off" spellcheck="false" />
+            <button class="btn btn--primary" id="ghSignInBtn" type="button">Unlock</button>
+          </div>
+          <p class="form-hint">Create a token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → select this repository, allow <strong>Contents read &amp; write</strong>. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Open token settings ↗</a></p>
+          <p class="field-error" id="ghSigninError" hidden></p>
+        </div>
+      </div>
+
+      <div class="container admin-layout" id="adminShell">
         <aside class="admin-sidebar">
           <p class="sidetag">Librarian space</p>
           <nav class="sidenav" aria-label="Admin sections">
@@ -195,6 +210,7 @@
             <button class="sidenav-btn" data-admtab="io" type="button"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> Import &amp; export</button>
             <button class="sidenav-btn" data-admtab="guide" type="button"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8h.01M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Catalog guide</button>
           </nav>
+          <button class="signout-btn" id="ghSignOutBtn" type="button" hidden>Sign out</button>
           <div class="pilot-card">
             <div class="pilot-icons" aria-hidden="true">🤝</div>
             <strong>Duaa &amp; Rayan</strong>
@@ -517,6 +533,6 @@
     </button>
   </nav>
 
-  <script src="app.js?v=mwdwwpmb"></script>
+  <script src="app.js?v=mwdx68mz"></script>
 </body>
 </html>

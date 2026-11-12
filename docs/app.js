@@ -79,6 +79,9 @@ const DOM = {
   mapColumnBooks: $('#mapColumnBooks'),
   // admin
   adminMap: $('#adminMap'),
+  adminSignin: $('#adminSignin'),
+  adminShell: $('#adminShell'),
+  ghSignOutBtn: $('#ghSignOutBtn'),
   catForm: $('#catForm'),
   formBanner: $('#formBanner'),
   fields: {
@@ -176,28 +179,236 @@ async function request(url, options = {}) {
   return payload;
 }
 
+/* ============================================================
+   GitHub-backed librarian space (static hosting)
+   The published site has no server, so catalog edits are committed
+   straight to docs/data/catalog.json through the GitHub Contents
+   API. Librarians unlock the space with their own access token;
+   every save is a normal git commit, and pushing to main makes
+   GitHub Pages republish the site (~1 minute).
+   ============================================================ */
+
+const GH_CATALOG = {
+  owner: 'Rayan-Labyb',
+  repo: 'mohammed-darfoufi-librairy',
+  path: 'docs/data/catalog.json',
+};
+const GH_TOKEN_KEY = 'mdms-gh-token';
+
+const ghToken = () => localStorage.getItem(GH_TOKEN_KEY) || '';
+
+async function ghRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`https://api.github.com${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${ghToken()}`,
+        ...(options.headers || {}),
+      },
+    });
+  } catch (networkError) {
+    throw new ApiError('Cannot reach GitHub. Check your connection and try again.', { status: 0 });
+  }
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem(GH_TOKEN_KEY);
+      // Reveal the sign-in gate again on the next paint
+      renderAdmin();
+      throw new ApiError('Your sign-in expired or was revoked. Sign in again.', { status: 401 });
+    }
+    throw new ApiError(payload?.message || `GitHub request failed (${response.status}).`, { status: response.status });
+  }
+  return payload;
+}
+
+function ghContentsPath() {
+  return `/repos/${GH_CATALOG.owner}/${GH_CATALOG.repo}/contents/${GH_CATALOG.path}`;
+}
+
+function ghBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
+}
+
+async function ghSignIn(token) {
+  const trimmed = token.trim();
+  if (!trimmed) throw new ApiError('Paste your GitHub access token first.');
+  // Verify the token against the catalog repository, including write access
+  const response = await fetch(`https://api.github.com/repos/${GH_CATALOG.owner}/${GH_CATALOG.repo}`, {
+    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${trimmed}` },
+  });
+  const repo = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status === 401
+        ? 'GitHub rejected that token. Copy it again from the token page — no spaces, the whole string.'
+        : 'Could not verify that token against the catalog repository.',
+      { status: response.status }
+    );
+  }
+  if (!repo.permissions || repo.permissions.push !== true) {
+    throw new ApiError('That token can read but not edit. Regenerate it with Contents: Read and write permission.', { status: 403 });
+  }
+  localStorage.setItem(GH_TOKEN_KEY, trimmed);
+}
+
+async function ghCommitCatalog(books, message) {
+  // Fresh sha on every save so concurrent librarians never clobber blindly
+  const current = await ghRequest(ghContentsPath());
+  await ghRequest(ghContentsPath(), {
+    method: 'PUT',
+    body: JSON.stringify({
+      message,
+      content: ghBase64(JSON.stringify({ books, total: books.length }, null, 2) + '\n'),
+      sha: current.sha,
+    }),
+  });
+}
+
+function staticNormalizeBook(payload, id) {
+  const isbn = String(payload.isbn || '').replace(/\D/g, '');
+  const price = Number(payload.estimatedPrice);
+  return {
+    id,
+    isbn,
+    title: String(payload.title || '').trim(),
+    author: String(payload.author || '').trim(),
+    category: String(payload.category || '').trim(),
+    language: String(payload.language || '').trim(),
+    columnNumber: Number(payload.columnNumber),
+    shelfTier: String(payload.shelfTier || 'B').toUpperCase(),
+    coverUrl: isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg` : '',
+    overview: String(payload.overview || '').trim(),
+    estimatedPrice: price ? `${price} MAD` : 'Price not listed',
+    purchaseUrl: isbn ? `https://www.amazon.com/s?k=${isbn}` : '',
+  };
+}
+
+function staticNextBookId(books) {
+  const numbers = books
+    .map((b) => (/^mdms-book-(\d+)$/.exec(b.id) || [])[1])
+    .filter(Boolean)
+    .map(Number);
+  return `mdms-book-${String((numbers.length ? Math.max(...numbers) : 0) + 1).padStart(3, '0')}`;
+}
+
+function staticAssertIsbnFree(books, isbn, exceptId = null) {
+  if (!isbn) return;
+  if (books.some((b) => b.isbn === isbn && b.id !== exceptId)) {
+    throw new ApiError('This ISBN already exists in the catalog.', 409, {
+      isbn: 'Another book already uses this ISBN.',
+    });
+  }
+}
+
+async function staticCreateBook(payload) {
+  const book = staticNormalizeBook(payload, staticNextBookId(state.books));
+  staticAssertIsbnFree(state.books, book.isbn);
+  const books = [...state.books, book].sort((a, b) => a.id.localeCompare(b.id));
+  await ghCommitCatalog(books, `Add book: ${book.title} (${book.id})`);
+  state.books = books;
+  return { book };
+}
+
+async function staticUpdateBook(id, payload) {
+  const existing = state.books.find((b) => b.id === id);
+  if (!existing) throw new ApiError(`Book with id "${id}" was not found.`, 404);
+  const book = staticNormalizeBook({ ...existing, ...payload }, id);
+  staticAssertIsbnFree(state.books, book.isbn, id);
+  const books = state.books.map((b) => (b.id === id ? book : b));
+  await ghCommitCatalog(books, `Update book: ${book.title} (${book.id})`);
+  state.books = books;
+  return { book };
+}
+
+async function staticDeleteBook(id) {
+  const existing = state.books.find((b) => b.id === id);
+  if (!existing) throw new ApiError(`Book with id "${id}" was not found.`, 404);
+  const books = state.books.filter((b) => b.id !== id);
+  await ghCommitCatalog(books, `Remove book: ${existing.title} (${existing.id})`);
+  state.books = books;
+  return { ok: true, id };
+}
+
+async function staticImportBooks(payload) {
+  const records = Array.isArray(payload) ? payload : payload.books;
+  if (!Array.isArray(records)) throw new ApiError('Import a JSON array of books (or { books: [...] }).', 422);
+  const books = [...state.books];
+  const errors = [];
+  let imported = 0;
+  records.forEach((record, index) => {
+    try {
+      if (!record || !String(record.title || '').trim()) throw new Error('Title is required.');
+      if (!String(record.author || '').trim()) throw new Error('Author is required.');
+      if (!String(record.overview || '').trim()) throw new Error('Overview is required.');
+      const column = Number.parseInt(record.columnNumber, 10);
+      if (!(column >= 1 && column <= 6)) throw new Error('Column must be 1-6.');
+      const tier = String(record.shelfTier || '').toUpperCase();
+      if (!['A', 'B', 'C', 'D'].includes(tier)) throw new Error('Shelf tier must be A, B, C or D.');
+      const isbn = String(record.isbn || '').replace(/\D/g, '');
+      staticAssertIsbnFree(books, isbn);
+      const price = Number(String(record.estimatedPrice ?? '').replace(/[^\d.]/g, ''));
+      books.push({
+        id: staticNextBookId(books),
+        isbn,
+        title: String(record.title).trim(),
+        author: String(record.author).trim(),
+        category: String(record.category || '').trim(),
+        language: String(record.language || '').trim(),
+        columnNumber: column,
+        shelfTier: tier,
+        coverUrl: String(record.coverUrl || '').trim(),
+        overview: String(record.overview).trim(),
+        estimatedPrice: price ? `${price} MAD` : 'Price not listed',
+        purchaseUrl: String(record.purchaseUrl || '').trim(),
+      });
+      imported += 1;
+    } catch (recordError) {
+      errors.push({ index, title: record && record.title, message: recordError.message });
+    }
+  });
+  if (imported) {
+    await ghCommitCatalog(books, `Import ${imported} book${imported === 1 ? '' : 's'} via online catalog`);
+    state.books = books;
+  }
+  return { imported, skipped: records.length - imported, errors };
+}
+
 const api = {
   async books() {
+    if (STATIC_MODE) {
+      const snapshot = await request('data/catalog.json');
+      return Array.isArray(snapshot) ? snapshot : snapshot.books || [];
+    }
     return (await request('/api/books')).books;
   },
-  createBook(payload) {
+  async createBook(payload) {
+    if (STATIC_MODE) return staticCreateBook(payload);
     return request('/api/books', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
   },
-  updateBook(id, payload) {
+  async updateBook(id, payload) {
+    if (STATIC_MODE) return staticUpdateBook(id, payload);
     return request(`/api/books/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
   },
-  deleteBook(id) {
+  async deleteBook(id) {
+    if (STATIC_MODE) return staticDeleteBook(id);
     return request(`/api/books/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
-  importBooks(payload) {
+  async importBooks(payload) {
+    if (STATIC_MODE) return staticImportBooks(payload);
     return request('/api/books/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -278,10 +489,6 @@ async function detectStaticMode() {
   } catch (networkError) {
     STATIC_MODE = true;
   }
-  if (STATIC_MODE) {
-    // Hide every entry point into the librarian space.
-    $$('[data-nav="admin"]').forEach((el) => { el.hidden = true; });
-  }
 }
 
 async function loadCatalog() {
@@ -302,6 +509,7 @@ async function loadCatalog() {
     updateStatTotals();
     if (state.route === 'discover') renderResults();
     if (state.route === 'map') renderMapView();
+    if (state.route === 'admin') renderAdmin();
     return;
   }
   try {
@@ -347,13 +555,11 @@ function routeFromLocation() {
   if (hash && ROUTES.includes(hash)) return hash;
   const segments = window.location.pathname.split('/').filter(Boolean);
   const last = segments[segments.length - 1] || '';
-  const route = ROUTES.includes(last) ? last : 'discover';
-  return STATIC_MODE && route === 'admin' ? 'discover' : route;
+  return ROUTES.includes(last) ? last : 'discover';
 }
 
 function setRoute(next, options = {}) {
   if (!ROUTES.includes(next)) next = 'discover';
-  if (STATIC_MODE && next === 'admin') next = 'discover';
   state.route = next;
 
   const url = `${APP_PREFIX}/${next}`;
@@ -1061,6 +1267,14 @@ function setAdminTab(tab) {
 }
 
 function renderAdmin() {
+  if (STATIC_MODE) {
+    // The published site gates the librarian space behind a GitHub token
+    const unlocked = Boolean(ghToken());
+    if (DOM.adminSignin) DOM.adminSignin.hidden = unlocked;
+    if (DOM.adminShell) DOM.adminShell.hidden = !unlocked;
+    if (DOM.ghSignOutBtn) DOM.ghSignOutBtn.hidden = !unlocked;
+    if (!unlocked) return;
+  }
   updateFormPreview();
   renderAdminList();
   setAdminTab(state.adminTab);
@@ -1072,6 +1286,21 @@ function renderAdmin() {
 
 function triggerDownload() {
   const link = document.createElement('a');
+  if (STATIC_MODE) {
+    // No server: export the in-memory (published) catalog directly
+    const blob = new Blob(
+      [JSON.stringify({ books: state.books, total: state.books.length }, null, 2) + '\n'],
+      { type: 'application/json' }
+    );
+    link.href = URL.createObjectURL(blob);
+    link.download = 'catalog.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    toast('catalog.json download started.', 'success', { title: 'Export' });
+    return;
+  }
   link.href = '/api/books/export';
   link.download = 'catalog.json';
   document.body.appendChild(link);
@@ -1303,6 +1532,46 @@ function bindTopNavEvents() {
 }
 
 function bindAdminEvents() {
+  const signinBtn = $('#ghSignInBtn');
+  const signinInput = $('#ghTokenInput');
+  if (signinBtn && signinInput) {
+    const attemptSignIn = async () => {
+      const errorEl = $('#ghSigninError');
+      signinBtn.disabled = true;
+      try {
+        await ghSignIn(signinInput.value);
+        signinInput.value = '';
+        if (errorEl) errorEl.hidden = true;
+        toast('Librarian space unlocked. Saves publish to the live site in about a minute.', 'success', { title: 'Signed in' });
+        renderAdmin();
+      } catch (error) {
+        if (errorEl) {
+          errorEl.textContent = error.message;
+          errorEl.hidden = false;
+        }
+        toast(error.message, 'error', { title: 'Sign-in failed' });
+      } finally {
+        signinBtn.disabled = false;
+      }
+    };
+    signinBtn.addEventListener('click', attemptSignIn);
+    signinInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        attemptSignIn();
+      }
+    });
+  }
+
+  const signOutBtn = $('#ghSignOutBtn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', () => {
+      localStorage.removeItem(GH_TOKEN_KEY);
+      toast('Signed out. Catalog editing is locked on this device.', 'info', { title: 'Signed out' });
+      renderAdmin();
+    });
+  }
+
   DOM.tierList.addEventListener('click', (event) => {
     const tier = event.target.closest('.tier');
     if (!tier) return;
