@@ -19,7 +19,19 @@ const OUT = path.join(ROOT, 'docs');
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.cpSync(SRC, OUT, { recursive: true });
-fs.copyFileSync(path.join(OUT, 'index.html'), path.join(OUT, '404.html'));
+
+// Cache-bust the subresources: every build rewrites the asset URLs with
+// a fresh query so browsers, proxies and the Pages CDN can never serve
+// a stale app.js/styles.css after a redeploy.
+const version = Date.now().toString(36);
+const indexPath = path.join(OUT, 'index.html');
+let html = fs.readFileSync(indexPath, 'utf8');
+html = html
+  .replace('href="styles.css"', `href="styles.css?v=${version}"`)
+  .replace('src="app.js"', `src="app.js?v=${version}"`);
+fs.writeFileSync(indexPath, html);
+
+fs.copyFileSync(indexPath, path.join(OUT, '404.html'));
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 
-console.log(`Built ${path.relative(ROOT, OUT)}/ (index, 404 fallback, .nojekyll)`);
+console.log(`Built ${path.relative(ROOT, OUT)}/ (assets ?v=${version})`);
