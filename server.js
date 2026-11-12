@@ -40,8 +40,13 @@ const normalizeText = (value) =>
   typeof value === 'string' ? value.trim() : value;
 
 function checkIsbn(value) {
+  // Accept any 13-digit EAN-13 (bookland 978/979 as well as regional
+  // prefixes like 622/628 used on Arabic editions) with a valid checksum
   const digits = String(value ?? '').replace(/\D/g, '');
-  return /^97[89]\d{10}$/.test(digits) ? digits : null;
+  if (!/^\d{13}$/.test(digits)) return null;
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) sum += Number(digits[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10 === Number(digits[12]) ? digits : null;
 }
 
 function normalizePrice(value) {
@@ -60,7 +65,7 @@ function validateBook(input = {}, existing = null) {
   const rawIsbn = normalizeText(src.isbn);
   const isbn = checkIsbn(src.isbn);
   if (!isbn && rawIsbn) {
-    errors.isbn = 'ISBN must be a valid 13-digit ISBN-13 starting with 978 or 979 — or leave it blank if the copy has none.';
+    errors.isbn = 'ISBN must be a valid 13-digit barcode with a matching checksum — or leave it blank if the copy has none.';
   }
 
   const title = normalizeText(src.title);
@@ -292,15 +297,18 @@ app.post(
 
     const imported = [];
     const errors = [];
-    const catalogIsbns = new Set(catalog.listBooks().map((b) => b.isbn));
+    const catalogIsbns = new Set(
+      catalog.listBooks().map((b) => b.isbn).filter(Boolean)
+    );
 
     records.forEach((record, index) => {
       try {
         const normalized = validateBook(record);
-        if (catalogIsbns.has(normalized.isbn)) {
+        // Copies without a barcode share an empty ISBN; skip the check
+        if (normalized.isbn && catalogIsbns.has(normalized.isbn)) {
           throw new ApiError(`Duplicate ISBN ${normalized.isbn} (already in catalog).`, 409);
         }
-        catalogIsbns.add(normalized.isbn);
+        if (normalized.isbn) catalogIsbns.add(normalized.isbn);
         imported.push(normalized);
       } catch (error) {
         errors.push({

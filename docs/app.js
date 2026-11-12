@@ -1058,7 +1058,7 @@ function setBanner(message, type = 'error') {
 }
 
 function isValidIsbn13(digits) {
-  if (!/^97[89]\d{10}$/.test(digits)) return false;
+  if (!/^\d{13}$/.test(digits)) return false;
   let sum = 0;
   for (let i = 0; i < 12; i += 1) sum += Number(digits[i]) * (i % 2 === 0 ? 1 : 3);
   return (10 - (sum % 10)) % 10 === Number(digits[12]);
@@ -1081,14 +1081,14 @@ function formValues() {
 function updateFormPreview() {
   const values = formValues();
   const isbn = values.isbn;
-  const digitsOk = /^\d{13}$/.test(isbn) && /^97[89]/.test(isbn);
+  const digitsOk = /^\d{13}$/.test(isbn);
 
   DOM.isbnHint.classList.toggle('is-ok', digitsOk && isValidIsbn13(isbn));
   DOM.isbnHint.textContent = digitsOk
     ? isValidIsbn13(isbn)
-      ? '✓ Valid ISBN-13 format. Verify the edition before saving.'
+      ? '✓ Valid EAN-13 barcode. Verify the edition before saving.'
       : '13 digits OK, but the checksum did not match. Verify the edition.'
-    : 'Enter a 13-digit ISBN starting with 978 or 979.';
+    : 'Enter the 13-digit barcode printed on the book (or leave it blank).';
 
   if (digitsOk) {
     DOM.pvCover.src = `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
@@ -1116,7 +1116,7 @@ function validateAdminForm(values) {
   if (!values.title) errors.title = 'Title is required. Type the title printed on the book cover.';
   if (!values.author) errors.author = 'Author is required.';
   if (values.isbn && !/^\d{13}$/.test(values.isbn)) {
-    errors.isbn = 'ISBN must be exactly 13 digits starting 978 or 979 — or leave it blank.';
+    errors.isbn = 'ISBN must be exactly 13 digits — or leave it blank.';
   }
   if (!values.overview) errors.overview = 'Overview is required. Write a short, student-friendly synopsis.';
   return errors;
@@ -1612,7 +1612,7 @@ function bindAdminEvents() {
     DOM.fields.shelfTier.value = 'B';
     clearFieldErrors();
     DOM.isbnHint.classList.remove('is-ok');
-    DOM.isbnHint.textContent = 'Enter a 13-digit ISBN starting with 978 or 979.';
+    DOM.isbnHint.textContent = 'Enter the 13-digit barcode printed on the book (or leave it blank).';
     updateFormPreview();
   });
 
