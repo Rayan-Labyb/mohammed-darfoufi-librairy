@@ -379,7 +379,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`Mohammed Darfoufi Middle School Digital Library running on http://localhost:${PORT}`);
   console.log(`Storage: SQLite (${path.join(__dirname, 'data', 'library.sqlite3')})`);
   // Print every address other devices on the same network can use.
@@ -400,4 +400,16 @@ app.listen(PORT, HOST, () => {
   } catch (err) {
     console.log(`(Could not list network addresses: ${err.message})`);
   }
+});
+
+// Friendly message when the port is already taken (e.g. a second copy
+// of the library is already running) instead of a crash dump.
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`\nPort ${PORT} is already in use — another copy of the library is probably already running.`);
+    console.error(`→ Try opening http://localhost:${PORT} — it may just be that copy.`);
+    console.error(`→ Or stop the other copy first (close its terminal, or run: fuser -k ${PORT}/tcp)\n`);
+    process.exit(1);
+  }
+  throw err;
 });
